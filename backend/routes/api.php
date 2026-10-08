@@ -85,20 +85,27 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::post('projects', [ProjectController::class, 'store'])->middleware('throttle:30,1');
     Route::get('projects/{project}', [ProjectController::class, 'show']);
     Route::put('projects/{project}', [ProjectController::class, 'update']);
+    Route::get('projects/{project}/evaluation', [ProjectController::class, 'evaluation']);
+    Route::post('projects/{project}/fast-track-acceptances', [ProjectController::class, 'recordFastTrackAcceptance']);
+    Route::post('projects/{project}/waivers', [ProjectController::class, 'recordWaiver']);
 
-    Route::get('process-statuses', [ProcessController::class, 'statuses']);
+    Route::get('process-stages', [ProcessController::class, 'stages']);
     Route::get('processes', [ProcessController::class, 'index']);
     Route::get('processes/{process}', [ProcessController::class, 'show']);
     Route::patch('processes/{process}', [ProcessController::class, 'update']);
-    Route::post('processes/{process}/transitions', [ProcessController::class, 'transition'])->middleware('throttle:60,1');
+    Route::post('processes/{process}/actions/{action}', [ProcessController::class, 'action'])
+        ->whereIn('action', ['submit', 'register-correction', 'approve-access', 'network-work', 'execution', 'request-inspection', 'connection-event', 'complete', 'cancel'])
+        ->middleware('throttle:60,1');
+    Route::post('inspections/{inspection}/schedule', [ProcessController::class, 'scheduleInspection']);
+    Route::post('inspections/{inspection}/result', [ProcessController::class, 'inspectionResult']);
     Route::post('processes/{process}/interactions', [ProcessController::class, 'storeInteraction']);
     Route::post('processes/{process}/pendencies', [PendencyController::class, 'store']);
     Route::post('pendencies/{pendency}/resolve', [PendencyController::class, 'resolve']);
 
     Route::get('document-types', [DocumentController::class, 'types']);
     Route::get('documents', [DocumentController::class, 'index']);
-    Route::post('processes/{process}/documents', [DocumentController::class, 'store'])->middleware('throttle:60,1');
-    Route::get('processes/{process}/documents/{type}/versions', [DocumentController::class, 'versions']);
+    Route::post('documents', [DocumentController::class, 'store'])->middleware('throttle:60,1');
+    Route::get('document-versions', [DocumentController::class, 'versions']);
     Route::post('documents/{document}/review', [DocumentController::class, 'review']);
     Route::get('documents/{document}/download', [DocumentController::class, 'download']);
 });

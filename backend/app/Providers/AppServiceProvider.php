@@ -3,6 +3,13 @@
 namespace App\Providers;
 
 use App\Domain\Audit\Redactor;
+use App\Domain\Catalog\Models\EquipmentItem;
+use App\Domain\Homologations\Models\ConnectionEvent;
+use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Homologations\Models\Inspection;
+use App\Domain\Homologations\Models\ProjectExecution;
+use App\Domain\Projects\Models\SolarProject;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use App\Domain\Tenancy\TenantContext;
 use App\Infrastructure\Secrets\EnvSecretProvider;
 use App\Infrastructure\Secrets\SecretProvider;
@@ -30,5 +37,15 @@ class AppServiceProvider extends ServiceProvider
         Model::shouldBeStrict(! $this->app->isProduction());
         Model::automaticallyEagerLoadRelationships();
         Date::useClass(\Carbon\CarbonImmutable::class);
+
+        // Aliases estáveis para document_links e rule_decisions (não dependem do nome da classe).
+        Relation::morphMap([
+            'project' => SolarProject::class,
+            'equipment' => EquipmentItem::class,
+            'execution' => ProjectExecution::class,
+            'inspection' => Inspection::class,
+            'connection_event' => ConnectionEvent::class,
+            'process' => HomologationProcess::class,
+        ]);
     }
 }

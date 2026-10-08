@@ -2,12 +2,20 @@
 
 namespace App\Http\Controllers\Api\Homologation;
 
-use App\Domain\Documents\DocumentRequirements;
-use App\Domain\Documents\Models\ProcessDocument;
+use App\Domain\Catalog\Models\EquipmentItem;
+use App\Domain\Documents\DocumentTypes;
+use App\Domain\Documents\Models\Document;
+use App\Domain\Documents\Models\DocumentLink;
+use App\Domain\Homologations\Models\ConnectionEvent;
 use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Homologations\Models\Inspection;
+use App\Domain\Homologations\Models\ProjectExecution;
+use App\Domain\Homologations\TimelineRecorder;
+use App\Domain\Projects\Models\SolarProject;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Homologation\DocumentResource;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -17,9 +25,25 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * Documento existe uma vez e é vinculado à entidade dona (projeto, equipamento,
+ * execução, vistoria, evento de conexão ou processo). Nova versão nunca apaga a anterior.
+ */
 final class DocumentController extends Controller
 {
     private const DISK = 'local';
+
+    /** @var array<string, class-string<Model>> */
+    private const OWNERS = [
+        'project' => SolarProject::class,
+        'equipment' => EquipmentItem::class,
+        'execution' => ProjectExecution::class,
+        'inspection' => Inspection::class,
+        'connection_event' => ConnectionEvent::class,
+        'process' => HomologationProcess::class,
+    ];
+
+    public function __construct(private readonly TimelineRecorder $timeline) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -27,73 +51,85 @@ final class DocumentController extends Controller
 
         $filters = $request->validate([
             'review_status' => ['sometimes', 'nullable', Rule::in(['pendente', 'aprovado', 'reprovado'])],
-            'type' => ['sometimes', 'nullable', Rule::in(array_keys(DocumentRequirements::TYPES))],
+            'type' => ['sometimes', 'nullable', Rule::in(array_keys(DocumentTypes::TYPES))],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
-        $docs = ProcessDocument::query()
-            ->with(['process.project.client', 'uploader', 'reviewer'])
-            ->where('is_current', true)
+        $docs = Document::query()
+            ->with(['uploader', 'reviewer', 'links.linkable'])
+            ->whereHas('links', fn ($q) => $q->where('is_current', true))
             ->when($filters['review_status'] ?? null, fn ($q, string $s) => $q->where('review_status', $s))
             ->when($filters['type'] ?? null, fn ($q, string $t) => $q->where('document_type', $t))
-            ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where(fn ($w) => $w
-                ->where('original_name', 'ilike', "%{$s}%")
-                ->orWhereHas('process', fn ($p) => $p->where('code', 'ilike', "%{$s}%"))))
+            ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where('original_name', 'ilike', "%{$s}%"))
             ->latest('id')
             ->paginate(25);
+
+        $docs->getCollection()->each(fn (Document $d) => $d->links->each(function ($l): void {
+            if ($l->linkable instanceof SolarProject) {
+                $l->linkable->loadMissing('client');
+            }
+        }));
 
         return DocumentResource::collection($docs);
     }
 
-    public function versions(HomologationProcess $process, string $type): AnonymousResourceCollection
+    public function types(): JsonResponse
+    {
+        return response()->json(['data' => DocumentTypes::options()]);
+    }
+
+    /** Histórico de versões de um tipo vinculado a uma entidade. */
+    public function versions(Request $request): AnonymousResourceCollection
     {
         $this->authorize('documents.view');
+        [$type, $owner] = $this->resolveOwner($request);
+        $docType = $request->validate(['document_type' => ['required', Rule::in(array_keys(DocumentTypes::TYPES))]])['document_type'];
+
+        $ids = DocumentLink::query()
+            ->where('linkable_type', $type)->where('linkable_id', $owner->getKey())
+            ->where('document_type', $docType)->pluck('document_id');
 
         return DocumentResource::collection(
-            $process->documents()->with(['uploader', 'reviewer'])->where('document_type', $type)->orderByDesc('version')->get(),
+            Document::query()->with(['uploader', 'reviewer', 'links'])->whereIn('id', $ids)->orderByDesc('version')->get(),
         );
     }
 
-    public function store(Request $request, HomologationProcess $process): JsonResponse
+    public function store(Request $request): JsonResponse
     {
         $this->authorize('documents.manage');
-
-        if (! $process->status->isEditable()) {
-            throw new DomainException("Documentos não podem ser enviados com o processo em \"{$process->status->label()}\".", 'process_locked');
-        }
+        [$type, $owner] = $this->resolveOwner($request);
 
         $data = $request->validate([
-            'document_type' => ['required', Rule::in(array_keys(DocumentRequirements::TYPES))],
+            'document_type' => ['required', Rule::in(array_keys(DocumentTypes::TYPES))],
             'file' => ['required', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png'],
         ]);
+
+        $this->assertCanAttach($type, $owner);
 
         $file = $request->file('file');
         $hash = hash_file('sha256', $file->getRealPath());
 
-        $document = DB::transaction(function () use ($process, $data, $file, $hash, $request): ProcessDocument {
-            $previous = $process->documents()
-                ->where('document_type', $data['document_type'])
-                ->lockForUpdate()
-                ->orderByDesc('version')
-                ->first();
+        $document = DB::transaction(function () use ($type, $owner, $data, $file, $hash, $request): Document {
+            $currentLink = DocumentLink::query()
+                ->where('linkable_type', $type)->where('linkable_id', $owner->getKey())
+                ->where('document_type', $data['document_type'])->where('is_current', true)
+                ->lockForUpdate()->first();
+            $previous = $currentLink?->document;
 
-            if ($previous && $previous->is_current && $previous->sha256 === $hash) {
+            if ($previous && $previous->sha256 === $hash) {
                 throw new DomainException('Este arquivo é idêntico à versão atual.', 'document_duplicated');
             }
 
             $path = $file->storeAs(
-                "tenants/{$process->tenant_id}/processes/{$process->uuid}",
+                'tenants/'.$owner->getAttribute('tenant_id')."/{$type}/".$owner->getAttribute('uuid'),
                 Str::uuid()->toString().'.'.$file->extension(),
                 self::DISK,
             );
 
-            $process->documents()->where('document_type', $data['document_type'])->update(['is_current' => false]);
-
-            return ProcessDocument::create([
-                'homologation_process_id' => $process->id,
+            $document = Document::create([
                 'document_type' => $data['document_type'],
                 'version' => ($previous?->version ?? 0) + 1,
-                'is_current' => true,
+                'supersedes_document_id' => $previous?->id,
                 'original_name' => Str::limit($file->getClientOriginalName(), 250, ''),
                 'storage_path' => $path,
                 'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
@@ -102,12 +138,29 @@ final class DocumentController extends Controller
                 'review_status' => 'pendente',
                 'uploaded_by' => $request->user()->id,
             ]);
+
+            $currentLink?->update(['is_current' => false]);
+            DocumentLink::create([
+                'document_id' => $document->id,
+                'linkable_type' => $type,
+                'linkable_id' => $owner->getKey(),
+                'document_type' => $data['document_type'],
+                'is_current' => true,
+                'linked_by' => $request->user()->id,
+            ]);
+
+            if ($process = $this->processOf($type, $owner)) {
+                $this->timeline->record($process, 'DOCUMENT_UPLOADED',
+                    DocumentTypes::label($data['document_type'])." v{$document->version} enviado", $document->original_name);
+            }
+
+            return $document;
         });
 
-        return DocumentResource::make($document->load('uploader'))->response()->setStatusCode(201);
+        return DocumentResource::make($document->load(['uploader', 'links']))->response()->setStatusCode(201);
     }
 
-    public function review(Request $request, ProcessDocument $document): DocumentResource
+    public function review(Request $request, Document $document): DocumentResource
     {
         $this->authorize('documents.manage');
 
@@ -116,7 +169,7 @@ final class DocumentController extends Controller
             'review_notes' => ['required_if:review_status,reprovado', 'nullable', 'string', 'max:2000'],
         ], ['review_notes.required_if' => 'Informe o motivo da reprovação.']);
 
-        if (! $document->is_current) {
+        if (! $document->links()->where('is_current', true)->exists()) {
             throw new DomainException('Somente a versão atual pode ser revisada.', 'document_not_current');
         }
 
@@ -127,10 +180,10 @@ final class DocumentController extends Controller
             'reviewed_at' => now(),
         ])->save();
 
-        return DocumentResource::make($document->load(['uploader', 'reviewer']));
+        return DocumentResource::make($document->load(['uploader', 'reviewer', 'links']));
     }
 
-    public function download(ProcessDocument $document): StreamedResponse
+    public function download(Document $document): StreamedResponse
     {
         $this->authorize('documents.view');
 
@@ -142,10 +195,42 @@ final class DocumentController extends Controller
         ]);
     }
 
-    public function types(): JsonResponse
+    /**
+     * @return array{0: string, 1: Model}
+     */
+    private function resolveOwner(Request $request): array
     {
-        return response()->json([
-            'data' => collect(DocumentRequirements::TYPES)->map(fn ($label, $value) => compact('value', 'label'))->values(),
+        $data = $request->validate([
+            'owner_type' => ['required', Rule::in(array_keys(self::OWNERS))],
+            'owner_id' => ['required', 'uuid'],
         ]);
+
+        $owner = self::OWNERS[$data['owner_type']]::query()->where('uuid', $data['owner_id'])->firstOrFail();
+
+        return [$data['owner_type'], $owner];
+    }
+
+    private function assertCanAttach(string $type, Model $owner): void
+    {
+        $process = $this->processOf($type, $owner);
+        if ($process && ! $process->isActive()) {
+            throw new DomainException('O processo não está em andamento.', 'process_not_active');
+        }
+        if ($type === 'project' && $process && ! $process->stage->allowsProjectEdit()) {
+            throw new DomainException(
+                "Documentos do projeto não podem ser alterados na etapa \"{$process->stage->label()}\".",
+                'project_locked',
+            );
+        }
+    }
+
+    private function processOf(string $type, Model $owner): ?HomologationProcess
+    {
+        return match ($type) {
+            'project' => $owner->process,
+            'process' => $owner,
+            'execution', 'inspection', 'connection_event' => $owner->process,
+            default => null,
+        };
     }
 }

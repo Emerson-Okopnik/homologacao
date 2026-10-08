@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\Homologation;
 
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\ProcessPendency;
+use App\Domain\Homologations\ProcessWorkflow;
+use App\Domain\Homologations\TimelineRecorder;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Homologation\PendencyResource;
@@ -13,11 +15,16 @@ use Illuminate\Validation\Rule;
 
 final class PendencyController extends Controller
 {
+    public function __construct(
+        private readonly ProcessWorkflow $workflow,
+        private readonly TimelineRecorder $timeline,
+    ) {}
+
     public function store(Request $request, HomologationProcess $process): JsonResponse
     {
         $this->authorize('homologations.manage');
 
-        if ($process->status->isTerminal()) {
+        if (! $process->isActive()) {
             throw new DomainException('Processo encerrado não aceita novas pendências.', 'process_closed');
         }
 
@@ -35,6 +42,8 @@ final class PendencyController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        $this->timeline->record($process, 'PENDENCY_CREATED', "Pendência aberta: {$pendency->title}", $pendency->description);
+
         return PendencyResource::make($pendency->load('author'))->response()->setStatusCode(201);
     }
 
@@ -42,19 +51,9 @@ final class PendencyController extends Controller
     {
         $this->authorize('homologations.manage');
 
-        if ($pendency->status === 'resolvida') {
-            throw new DomainException('Esta pendência já foi resolvida.', 'pendency_resolved');
-        }
+        $data = $request->validate(['resolution' => ['required', 'string', 'max:5000']]);
+        $this->workflow->resolvePendency($pendency, $request->user(), $data['resolution']);
 
-        $data = $request->validate(['resolution' => ['required', 'string', 'min:3', 'max:5000']]);
-
-        $pendency->forceFill([
-            'status' => 'resolvida',
-            'resolution' => $data['resolution'],
-            'resolved_by' => $request->user()->id,
-            'resolved_at' => now(),
-        ])->save();
-
-        return PendencyResource::make($pendency->load(['author', 'resolver']));
+        return PendencyResource::make($pendency->refresh()->load(['author', 'resolver']));
     }
 }

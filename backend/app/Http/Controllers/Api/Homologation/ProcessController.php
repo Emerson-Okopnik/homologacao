@@ -2,11 +2,18 @@
 
 namespace App\Http\Controllers\Api\Homologation;
 
+use App\Domain\Homologations\Enums\ConnectionEventType;
+use App\Domain\Homologations\Enums\NetworkWorkStatus;
 use App\Domain\Homologations\Enums\ProcessStatus;
+use App\Domain\Homologations\Enums\WorkflowStage;
 use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Homologations\Models\Inspection;
 use App\Domain\Homologations\Models\ProcessInteraction;
 use App\Domain\Homologations\ProcessWorkflow;
-use App\Domain\Users\Enums\PermissionKey;
+use App\Domain\Homologations\TimelineRecorder;
+use App\Domain\Rules\Enums\RequirementPhase;
+use App\Domain\Rules\RequirementEngine;
+use App\Domain\Shared\Exceptions\DomainException;
 use App\Domain\Users\Models\User;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Homologation\ProcessResource;
@@ -17,13 +24,18 @@ use Illuminate\Validation\Rule;
 
 final class ProcessController extends Controller
 {
-    public function __construct(private readonly ProcessWorkflow $workflow) {}
+    public function __construct(
+        private readonly ProcessWorkflow $workflow,
+        private readonly RequirementEngine $requirements,
+        private readonly TimelineRecorder $timeline,
+    ) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
         $this->authorize('homologations.view');
 
         $filters = $request->validate([
+            'stage' => ['sometimes', 'nullable', Rule::enum(WorkflowStage::class)],
             'status' => ['sometimes', 'nullable', Rule::enum(ProcessStatus::class)],
             'distributor' => ['sometimes', 'nullable', 'uuid'],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -32,8 +44,9 @@ final class ProcessController extends Controller
         ]);
 
         $query = HomologationProcess::query()
-            ->with(['distributor', 'assignee', 'project.client', 'project.consumerUnit'])
+            ->with(['distributor', 'assignee', 'project.client', 'project.consumerUnit', 'deadlines'])
             ->withCount('openPendencies')
+            ->when($filters['stage'] ?? null, fn ($q, string $s) => $q->where('stage', $s))
             ->when($filters['status'] ?? null, fn ($q, string $s) => $q->where('status', $s))
             ->when($filters['distributor'] ?? null, fn ($q, string $uuid) => $q->whereHas('distributor', fn ($d) => $d->where('uuid', $uuid)))
             ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where(fn ($w) => $w
@@ -43,10 +56,7 @@ final class ProcessController extends Controller
                 ->orWhereHas('project.consumerUnit', fn ($u) => $u->where('number', 'like', "%{$s}%"))));
 
         if ($request->boolean('board')) {
-            $query->whereNotIn('status', [ProcessStatus::Cancelado->value, ProcessStatus::Reprovado->value])
-                ->orderBy('status_changed_at');
-
-            return ProcessResource::collection($query->limit(500)->get());
+            return ProcessResource::collection($query->where('status', ProcessStatus::Active->value)->orderBy('stage_changed_at')->limit(500)->get());
         }
 
         return ProcessResource::collection($query->latest('id')->paginate($filters['per_page'] ?? 20));
@@ -56,14 +66,7 @@ final class ProcessController extends Controller
     {
         $this->authorize('homologations.view');
 
-        $process->load([
-            'distributor', 'assignee', 'history.user', 'interactions.user',
-            'pendencies.author', 'pendencies.resolver',
-            'currentDocuments.uploader', 'currentDocuments.reviewer',
-            'project.client', 'project.consumerUnit.distributor', 'project.technicalResponsible', 'project.equipment',
-        ])->loadCount('openPendencies');
-
-        return ProcessResource::make($process)->withReadiness($this->workflow->readinessIssues($process));
+        return $this->detail($process);
     }
 
     public function update(Request $request, HomologationProcess $process): ProcessResource
@@ -72,60 +75,93 @@ final class ProcessController extends Controller
 
         $data = $request->validate([
             'assigned_user_id' => ['sometimes', 'nullable', 'uuid'],
-            'due_date' => ['sometimes', 'nullable', 'date'],
-            'protocol_number' => ['sometimes', 'nullable', 'string', 'max:80'],
-            'justification' => ['nullable', 'string', 'max:1000'],
         ]);
 
         if (array_key_exists('assigned_user_id', $data)) {
             $process->assigned_user_id = $data['assigned_user_id']
                 ? User::query()->where('uuid', $data['assigned_user_id'])->firstOrFail()->id
                 : null;
-        }
-        if (array_key_exists('due_date', $data)) {
-            $process->due_date = $data['due_date'];
+            $process->save();
         }
 
-        // Protocolo já registrado só pode ser corrigido com permissão específica e justificativa (auditada).
-        if (array_key_exists('protocol_number', $data) && $data['protocol_number'] !== $process->protocol_number) {
-            if ($process->protocol_number !== null) {
-                abort_unless($request->user()->hasPermission(PermissionKey::ProtocolOverride), 403, 'Sem permissão para corrigir protocolo.');
-                $request->validate(['justification' => ['required', 'string', 'min:10']]);
-            }
-            if ($data['protocol_number']) {
-                $this->workflow->assertProtocolAvailable($process, trim($data['protocol_number']));
-            }
-            $process->protocol_number = $data['protocol_number'] ? trim($data['protocol_number']) : null;
-
-            ProcessInteraction::create([
-                'homologation_process_id' => $process->id,
-                'type' => 'nota',
-                'channel' => 'portal',
-                'description' => 'Protocolo alterado para '.($process->protocol_number ?? '(vazio)').
-                    (! empty($data['justification']) ? '. Justificativa: '.$data['justification'] : '.'),
-                'user_id' => $request->user()->id,
-                'occurred_at' => now(),
-            ]);
-        }
-
-        $process->save();
-
-        return $this->show($process);
+        return $this->detail($process);
     }
 
-    public function transition(Request $request, HomologationProcess $process): ProcessResource
+    /**
+     * Endpoint único de ações do fluxo. O domínio valida etapa e requisitos.
+     */
+    public function action(Request $request, HomologationProcess $process, string $action): ProcessResource
     {
         $this->authorize('homologations.manage');
+        $user = $request->user();
 
+        match ($action) {
+            'submit' => $this->workflow->submit($process, $user,
+                $request->validate(['protocol_number' => ['required', 'string', 'max:80']])['protocol_number']),
+            'register-correction' => (function () use ($request, $process, $user) {
+                $d = $request->validate([
+                    'items' => ['required', 'array', 'min:1', 'max:30'],
+                    'items.*' => ['required', 'string', 'max:200'],
+                    'notes' => ['nullable', 'string', 'max:5000'],
+                ]);
+                $this->workflow->registerCorrection($process, $user, $d['items'], $d['notes'] ?? null);
+            })(),
+            'approve-access' => (function () use ($request, $process, $user) {
+                $d = $request->validate([
+                    'network_work_status' => ['required', Rule::enum(NetworkWorkStatus::class)],
+                    'notes' => ['nullable', 'string', 'max:2000'],
+                ]);
+                $this->workflow->approveAccess($process, $user, NetworkWorkStatus::from($d['network_work_status']), $d['notes'] ?? null);
+            })(),
+            'network-work' => (function () use ($request, $process, $user) {
+                $d = $request->validate([
+                    'network_work_status' => ['required', Rule::enum(NetworkWorkStatus::class)],
+                    'notes' => ['nullable', 'string', 'max:2000'],
+                ]);
+                $this->workflow->updateNetworkWork($process, $user, NetworkWorkStatus::from($d['network_work_status']), $d['notes'] ?? null);
+            })(),
+            'execution' => $this->workflow->reportExecution($process, $user, $request->validate([
+                'started_at' => ['nullable', 'date', 'before_or_equal:today'],
+                'completed_at' => ['required', 'date', 'before_or_equal:today', 'after_or_equal:started_at'],
+                'notes' => ['nullable', 'string', 'max:5000'],
+            ])),
+            'request-inspection' => $this->workflow->requestInspection($process, $user,
+                $request->validate(['scheduled_for' => ['nullable', 'date', 'after_or_equal:today']])['scheduled_for'] ?? null),
+            'connection-event' => $this->workflow->recordConnectionEvent($process, $user, $request->validate([
+                'type' => ['required', Rule::enum(ConnectionEventType::class)],
+                'occurred_at' => ['required', 'date', 'before_or_equal:now'],
+                'meter_number' => ['nullable', 'string', 'max:60'],
+                'notes' => ['nullable', 'string', 'max:2000'],
+            ])),
+            'complete' => $this->workflow->complete($process, $user),
+            'cancel' => $this->workflow->cancel($process, $user,
+                $request->validate(['reason' => ['required', 'string', 'min:10', 'max:2000']])['reason']),
+            default => throw new DomainException('Ação desconhecida.', 'unknown_action', 404),
+        };
+
+        return $this->detail($process->refresh());
+    }
+
+    public function scheduleInspection(Request $request, Inspection $inspection): ProcessResource
+    {
+        $this->authorize('homologations.manage');
+        $data = $request->validate(['scheduled_for' => ['required', 'date', 'after_or_equal:today']]);
+        $this->workflow->scheduleInspection($inspection, $request->user(), $data['scheduled_for']);
+
+        return $this->detail($inspection->process->refresh());
+    }
+
+    public function inspectionResult(Request $request, Inspection $inspection): ProcessResource
+    {
+        $this->authorize('homologations.manage');
         $data = $request->validate([
-            'status' => ['required', Rule::enum(ProcessStatus::class)],
-            'reason' => ['nullable', 'string', 'max:2000'],
-            'protocol_number' => ['nullable', 'string', 'max:80'],
-        ]);
+            'approved' => ['required', 'boolean'],
+            'notes' => ['nullable', 'required_if:approved,false', 'string', 'max:5000'],
+        ], ['notes.required_if' => 'Descreva o motivo da reprovação.']);
 
-        $this->workflow->transition($process, ProcessStatus::from($data['status']), $request->user(), $data);
+        $this->workflow->recordInspectionResult($inspection, $request->user(), (bool) $data['approved'], $data['notes'] ?? null);
 
-        return $this->show($process->refresh());
+        return $this->detail($inspection->process->refresh());
     }
 
     public function storeInteraction(Request $request, HomologationProcess $process): JsonResponse
@@ -146,22 +182,50 @@ final class ProcessController extends Controller
             'occurred_at' => $data['occurred_at'] ?? now(),
         ]);
 
+        $this->timeline->record($process, 'INTERACTION', 'Interação registrada', $data['description']);
+
         return response()->json(['message' => 'Interação registrada.'], 201);
     }
 
-    /**
-     * Metadados para a UI montar colunas e transições sem duplicar regras.
-     */
-    public function statuses(): JsonResponse
+    public function stages(): JsonResponse
     {
-        return response()->json([
-            'data' => array_map(fn (ProcessStatus $s) => [
-                'value' => $s->value,
-                'label' => $s->label(),
-                'on_board' => in_array($s, ProcessStatus::board(), true),
-                'terminal' => $s->isTerminal(),
-                'transitions' => array_map(fn ($t) => $t->value, $s->allowedTransitions()),
-            ], ProcessStatus::cases()),
+        return response()->json(['data' => [
+            'stages' => array_map(fn (WorkflowStage $s) => ['value' => $s->value, 'label' => $s->label()], WorkflowStage::cases()),
+            'network_work' => array_map(fn (NetworkWorkStatus $s) => ['value' => $s->value, 'label' => $s->label()], NetworkWorkStatus::cases()),
+            'connection_events' => array_map(fn (ConnectionEventType $s) => ['value' => $s->value, 'label' => $s->label()], ConnectionEventType::cases()),
+        ]]);
+    }
+
+    private function detail(HomologationProcess $process): ProcessResource
+    {
+        $process->load([
+            'distributor', 'assignee', 'currentVersion', 'deadlines', 'execution',
+            'inspections', 'connectionEvents', 'timeline.user', 'pendencies.author', 'pendencies.resolver',
+            'interactions.user',
+            'project' => fn ($q) => $q->with([
+                'client', 'consumerUnit.distributor', 'serviceRequest', 'equipment',
+                'responsibilities.responsible', 'compensationUnits.consumerUnit', 'fastTrackAcceptances', 'waivers', 'process',
+            ]),
+        ])->loadCount('openPendencies');
+
+        $phase = match ($process->stage) {
+            WorkflowStage::Execution, WorkflowStage::Inspection => RequirementPhase::InspectionRequest,
+            WorkflowStage::Connection => RequirementPhase::Completion,
+            default => RequirementPhase::Submission,
+        };
+
+        $checklist = $this->requirements->evaluate($process->project, $phase, $process);
+        unset($checklist['facts']);
+
+        $documents = $this->requirements->currentDocuments($process->project, $process)
+            ->load(['uploader', 'reviewer'])
+            ->map(fn ($d) => (new \App\Http\Resources\Homologation\DocumentResource($d))->toArray(request()))
+            ->values();
+
+        return ProcessResource::make($process)->with_([
+            'actions' => $this->workflow->availableActions($process),
+            'checklist' => $checklist,
+            'documents' => $documents,
         ]);
     }
 }
