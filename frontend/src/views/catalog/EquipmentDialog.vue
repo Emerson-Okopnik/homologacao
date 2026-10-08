@@ -6,14 +6,14 @@ import SelectField from '@/components/ui/SelectField.vue'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import type { Equipment } from '@/types/api'
 
-const props = defineProps<{ item: Equipment | null }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+const props = defineProps<{ item: Equipment | null; defaultType?: Equipment['type'] }>()
+const emit = defineEmits<{ close: []; saved: [item: Equipment] }>()
 
 const toText = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value))
 const toNumber = (value: string) => (value.trim() === '' ? null : Number(value.replace(',', '.')))
 
 const form = reactive({
-  type: props.item?.type ?? 'module',
+  type: props.item?.type ?? props.defaultType ?? 'module',
   manufacturer: props.item?.manufacturer ?? '',
   model: props.item?.model ?? '',
   power_w: toText(props.item?.power_w),
@@ -36,9 +36,10 @@ async function submit() {
     certification: form.certification || null,
   }
   try {
-    if (props.item) await api(`/equipment/${props.item.id}`, { method: 'PUT', body })
-    else await api('/equipment', { method: 'POST', body })
-    emit('saved')
+    const result = props.item
+      ? await api<{ data: Equipment }>(`/equipment/${props.item.id}`, { method: 'PUT', body })
+      : await api<{ data: Equipment }>('/equipment', { method: 'POST', body })
+    emit('saved', result.data)
   } catch (e) {
     error.value = toApiError(e)
   } finally {

@@ -7,7 +7,7 @@ import { api, toApiError, type ApiError } from '@/lib/http'
 import type { TechnicalResponsible } from '@/types/api'
 
 const props = defineProps<{ item: TechnicalResponsible | null }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+const emit = defineEmits<{ close: []; saved: [item: TechnicalResponsible] }>()
 
 const form = reactive({
   name: props.item?.name ?? '',
@@ -27,9 +27,10 @@ async function submit() {
   error.value = null
   const body = { ...form, state: form.state.toUpperCase() }
   try {
-    if (props.item) await api(`/technical-responsibles/${props.item.id}`, { method: 'PUT', body })
-    else await api('/technical-responsibles', { method: 'POST', body })
-    emit('saved')
+    const result = props.item
+      ? await api<{ data: TechnicalResponsible }>(`/technical-responsibles/${props.item.id}`, { method: 'PUT', body })
+      : await api<{ data: TechnicalResponsible }>('/technical-responsibles', { method: 'POST', body })
+    emit('saved', result.data)
   } catch (e) {
     error.value = toApiError(e)
   } finally {

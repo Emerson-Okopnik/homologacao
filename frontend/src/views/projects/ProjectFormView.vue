@@ -1,20 +1,28 @@
 <script setup lang="ts">
 import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Plus, Trash2 } from '@lucide/vue'
+import { ArrowLeft, BatteryCharging, Cpu, Minus, PackagePlus, Plus, Sun, Trash2, UserPlus, Zap } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import FormField from '@/components/ui/FormField.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextareaField from '@/components/ui/TextareaField.vue'
+import ClientFormDialog from '@/views/clients/ClientFormDialog.vue'
+import ConsumerUnitDialog from '@/views/clients/ConsumerUnitDialog.vue'
+import EquipmentDialog from '@/views/catalog/EquipmentDialog.vue'
+import ResponsibleDialog from '@/views/catalog/ResponsibleDialog.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import { formatNumber } from '@/lib/format'
-import type { Client, ConsumerUnit, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
+import { useAuthStore } from '@/stores/auth'
+import type { Client, ConsumerUnit, Distributor, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
 
 const MICRO_LIMIT_KW = 75
+const TYPE_LABEL: Record<Equipment['type'], string> = { module: 'Módulo', inverter: 'Inversor', battery: 'Bateria' }
+const TYPE_ICON = { module: Sun, inverter: Cpu, battery: BatteryCharging }
 
+const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const projectId = computed(() => (route.params.id ? String(route.params.id) : null))
@@ -32,6 +40,16 @@ const { data: lookups, error: lookupError } = useApiQuery(
   },
 )
 
+const createdClients = ref<Client[]>([])
+const createdResponsibles = ref<TechnicalResponsible[]>([])
+const createdEquipment = ref<Equipment[]>([])
+
+const uniqueById = <T extends { id: string }>(list: T[]) => [...new Map(list.map((i) => [i.id, i])).values()]
+const allClients = computed(() => uniqueById([...createdClients.value, ...(lookups.value?.clients ?? [])]))
+const allResponsibles = computed(() => uniqueById([...createdResponsibles.value, ...(lookups.value?.responsibles ?? [])]))
+const allEquipment = computed(() => uniqueById([...createdEquipment.value, ...(lookups.value?.equipment ?? [])]))
+const equipmentById = computed(() => new Map(allEquipment.value.map((e) => [e.id, e])))
+
 const form = reactive({
   client_id: typeof route.query.client === 'string' ? route.query.client : '',
   consumer_unit_id: '',
@@ -48,10 +66,20 @@ const units = shallowRef<ConsumerUnit[]>([])
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
 
+const clientDialog = ref(false)
+const unitDialog = ref(false)
+const responsibleDialog = ref(false)
+const equipmentDialog = shallowRef<{ type: Equipment['type']; rowIndex: number | null } | null>(null)
+const distributors = shallowRef<Distributor[] | null>(null)
+const notice = ref('')
+
 watch(
   () => lookups.value?.project,
   (project) => {
     if (!project) return
+    if (project.client && !lookups.value?.clients.some((c) => c.id === project.client!.id)) {
+      createdClients.value.push(project.client as Client)
+    }
     Object.assign(form, {
       client_id: project.client?.id ?? '',
       consumer_unit_id: project.consumer_unit?.id ?? '',
@@ -71,25 +99,31 @@ watch(
   () => form.client_id,
   async (clientId, previous) => {
     if (previous !== undefined && previous !== clientId && !lookups.value?.project) form.consumer_unit_id = ''
-    units.value = clientId
-      ? (await api<Paginated<ConsumerUnit>>('/consumer-units', { query: { client: clientId, active: true, per_page: 100 } })).data
-      : []
+    if (!clientId) {
+      units.value = []
+      return
+    }
+    const fetched = (await api<Paginated<ConsumerUnit>>('/consumer-units', { query: { client: clientId, active: true, per_page: 100 } })).data
+    if (form.client_id !== clientId) return
+    units.value = uniqueById([...units.value.filter((u) => u.client?.id === clientId), ...fetched])
     if (!form.consumer_unit_id && units.value.length === 1) form.consumer_unit_id = units.value[0]!.id
   },
   { immediate: true },
 )
 
-const clientOptions = computed(() => (lookups.value?.clients ?? []).map((c) => ({ value: c.id, label: c.name })))
+const clientOptions = computed(() =>
+  allClients.value.map((c) => ({ value: c.id, label: c.document ? `${c.name} · ${c.document}` : c.name })),
+)
 const unitOptions = computed(() =>
   units.value.map((u) => ({ value: u.id, label: `UC ${u.number} · ${u.distributor?.name ?? ''} · ${u.address.city}/${u.address.state}` })),
 )
 const responsibleOptions = computed(() =>
-  (lookups.value?.responsibles ?? []).map((r) => ({ value: r.id, label: `${r.name} (${r.council} ${r.registration})` })),
+  allResponsibles.value.map((r) => ({ value: r.id, label: `${r.name} (${r.council} ${r.registration})` })),
 )
 const equipmentOptions = computed(() =>
-  (lookups.value?.equipment ?? []).map((e) => ({
+  allEquipment.value.map((e) => ({
     value: e.id,
-    label: `${e.type === 'module' ? 'Módulo' : e.type === 'inverter' ? 'Inversor' : 'Bateria'} · ${e.manufacturer} ${e.model}`,
+    label: `${TYPE_LABEL[e.type]} · ${e.manufacturer} ${e.model}${e.power_w ? ` · ${formatNumber(e.power_w, 'W')}` : ''}`,
   })),
 )
 
@@ -101,12 +135,76 @@ const accessPower = computed(() => {
   return Math.min(kwp, kw)
 })
 const generationType = computed(() => (accessPower.value === null ? null : accessPower.value <= MICRO_LIMIT_KW ? 'Microgeração' : 'Minigeração'))
-const moduleTotalKwp = computed(() =>
-  items.value.reduce((sum, item) => {
-    const eq = lookups.value?.equipment.find((e) => e.id === item.id)
-    return eq?.type === 'module' && eq.power_w ? sum + (eq.power_w * Number(item.quantity || 0)) / 1000 : sum
-  }, 0),
-)
+
+function totalKw(type: Equipment['type']) {
+  const total = items.value.reduce((sum, item) => {
+    const eq = equipmentById.value.get(item.id)
+    return eq?.type === type && eq.power_w ? sum + (eq.power_w * Number(item.quantity || 0)) / 1000 : sum
+  }, 0)
+  return Math.round(total * 100) / 100
+}
+const moduleTotalKwp = computed(() => totalKw('module'))
+const inverterTotalKw = computed(() => totalKw('inverter'))
+const hasBatteryItem = computed(() => items.value.some((i) => equipmentById.value.get(i.id)?.type === 'battery'))
+
+watch(moduleTotalKwp, (total, old) => {
+  if (total && (form.installed_power_kwp === '' || numeric(form.installed_power_kwp) === old)) form.installed_power_kwp = String(total)
+})
+watch(inverterTotalKw, (total, old) => {
+  if (total && (form.inverter_power_kw === '' || numeric(form.inverter_power_kw) === old)) form.inverter_power_kw = String(total)
+})
+watch(hasBatteryItem, (has) => {
+  if (has) form.has_battery = true
+})
+
+function changeQuantity(index: number, delta: number) {
+  const item = items.value[index]!
+  item.quantity = String(Math.max(1, Number(item.quantity || 0) + delta))
+}
+
+async function ensureDistributors() {
+  if (!distributors.value) {
+    distributors.value = (await api<{ data: Distributor[] }>('/distributors', { query: { active: true } })).data
+  }
+}
+
+async function openUnitDialog() {
+  await ensureDistributors()
+  unitDialog.value = true
+}
+
+async function onClientSaved(client: Client) {
+  createdClients.value.unshift(client)
+  clientDialog.value = false
+  form.client_id = client.id
+  notice.value = `Cliente ${client.name} cadastrado. Agora informe a unidade consumidora onde o sistema será instalado.`
+  if (auth.can('clients.manage')) await openUnitDialog()
+}
+
+function onUnitSaved(unit: ConsumerUnit) {
+  unitDialog.value = false
+  units.value = uniqueById([unit, ...units.value])
+  form.consumer_unit_id = unit.id
+  notice.value = `UC ${unit.number} cadastrada e selecionada.`
+}
+
+function onResponsibleSaved(rt: TechnicalResponsible) {
+  createdResponsibles.value.unshift(rt)
+  responsibleDialog.value = false
+  form.technical_responsible_id = rt.id
+}
+
+function onEquipmentSaved(eq: Equipment) {
+  createdEquipment.value.unshift(eq)
+  const rowIndex = equipmentDialog.value?.rowIndex ?? null
+  equipmentDialog.value = null
+  if (rowIndex !== null && items.value[rowIndex]) items.value[rowIndex]!.id = eq.id
+  else items.value.push({ id: eq.id, quantity: eq.type === 'module' ? '10' : '1' })
+}
+
+function addRow() {
+  items.value.push({ id: '', quantity: '1' })
+}
 
 async function submit() {
   submitting.value = true
@@ -141,7 +239,7 @@ async function submit() {
     </RouterLink>
     <PageHeader
       :title="projectId ? `Editar projeto ${lookups?.project?.code ?? ''}` : 'Novo projeto'"
-      description="Ao salvar um novo projeto, o processo de homologação é aberto automaticamente com o checklist de documentos."
+      description="Selecione ou cadastre tudo aqui mesmo. Ao salvar, o processo de homologação é aberto com o checklist de documentos."
     />
 
     <InlineAlert v-if="lookupError" :correlation-id="lookupError.correlationId">{{ lookupError.message }}</InlineAlert>
@@ -150,43 +248,179 @@ async function submit() {
       <InlineAlert v-if="error && Object.keys(error.errors).length === 0" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
       <InlineAlert v-else-if="error">Revise os campos destacados.</InlineAlert>
 
+      <p v-if="notice" class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-ink" role="status">{{ notice }}</p>
+
       <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-holder">
-        <h2 id="sec-holder" class="font-semibold">Titular e unidade consumidora</h2>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <SelectField
-            v-model="form.client_id"
-            label="Cliente"
-            placeholder="Selecione o cliente"
-            :options="clientOptions"
-            required
-            :error="error?.firstError('client_id')"
-          />
-          <SelectField
-            v-model="form.consumer_unit_id"
-            label="Unidade consumidora"
-            :placeholder="form.client_id && unitOptions.length === 0 ? 'Cliente sem UCs ativas' : 'Selecione a UC'"
-            :options="unitOptions"
-            required
-            :error="error?.firstError('consumer_unit_id')"
-          />
+        <div class="flex items-center gap-3">
+          <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">1</span>
+          <h2 id="sec-holder" class="font-semibold">Titular e unidade consumidora</h2>
         </div>
-        <SelectField
-          v-model="form.technical_responsible_id"
-          label="Responsável técnico"
-          placeholder="Definir depois"
-          :options="responsibleOptions"
-          hint="Obrigatório antes do envio à distribuidora."
-          :error="error?.firstError('technical_responsible_id')"
-        />
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <SelectField
+              v-model="form.client_id"
+              label="Cliente"
+              :placeholder="clientOptions.length ? 'Selecione o cliente' : 'Nenhum cliente cadastrado'"
+              :options="clientOptions"
+              required
+              :error="error?.firstError('client_id')"
+            />
+            <button
+              v-if="auth.can('clients.manage')"
+              type="button"
+              class="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary hover:underline"
+              @click="clientDialog = true"
+            >
+              <UserPlus class="size-4" aria-hidden="true" />
+              Cadastrar novo cliente
+            </button>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <SelectField
+              v-model="form.consumer_unit_id"
+              label="Unidade consumidora"
+              :placeholder="!form.client_id ? 'Selecione o cliente primeiro' : unitOptions.length === 0 ? 'Cliente sem UCs — cadastre abaixo' : 'Selecione a UC'"
+              :options="unitOptions"
+              required
+              :error="error?.firstError('consumer_unit_id')"
+            />
+            <button
+              v-if="auth.can('clients.manage')"
+              type="button"
+              class="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline"
+              :disabled="!form.client_id"
+              @click="openUnitDialog"
+            >
+              <Zap class="size-4" aria-hidden="true" />
+              Cadastrar nova UC
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <SelectField
+            v-model="form.technical_responsible_id"
+            label="Responsável técnico"
+            placeholder="Definir depois"
+            :options="responsibleOptions"
+            hint="Obrigatório antes do envio à distribuidora."
+            :error="error?.firstError('technical_responsible_id')"
+          />
+          <button
+            v-if="auth.can('technical_responsibles.manage')"
+            type="button"
+            class="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary hover:underline"
+            @click="responsibleDialog = true"
+          >
+            <UserPlus class="size-4" aria-hidden="true" />
+            Cadastrar responsável técnico
+          </button>
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-eq">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">2</span>
+            <h2 id="sec-eq" class="font-semibold">Equipamentos</h2>
+          </div>
+          <BaseButton variant="secondary" :disabled="items.length >= 30" @click="addRow">
+            <Plus class="size-4" aria-hidden="true" />
+            Adicionar do catálogo
+          </BaseButton>
+        </div>
+
+        <div v-if="auth.can('projects.manage')" class="flex flex-col gap-2 rounded-xl border border-dashed border-line bg-canvas p-4">
+          <p class="flex items-center gap-2 text-sm font-medium">
+            <PackagePlus class="size-4 text-primary" aria-hidden="true" />
+            Não encontrou o equipamento? Cadastre e ele já entra no projeto:
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="type in (['module', 'inverter', 'battery'] as const)"
+              :key="type"
+              type="button"
+              class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium hover:border-primary hover:text-primary"
+              :disabled="items.length >= 30"
+              @click="equipmentDialog = { type, rowIndex: null }"
+            >
+              <component :is="TYPE_ICON[type]" class="size-4" aria-hidden="true" />
+              Novo {{ TYPE_LABEL[type].toLowerCase() }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="items.length === 0" class="text-sm text-muted">Nenhum equipamento vinculado ainda.</p>
+
+        <ul v-else class="flex flex-col gap-3">
+          <li
+            v-for="(item, index) in items"
+            :key="index"
+            class="grid items-end gap-3 rounded-xl border border-line p-3 sm:grid-cols-[1fr_auto_auto]"
+          >
+            <SelectField
+              v-model="item.id"
+              :label="`Equipamento ${index + 1}`"
+              placeholder="Selecione"
+              :options="equipmentOptions"
+              :error="error?.firstError(`equipment.${index}.id`)"
+            />
+            <div class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium" :id="`qty-${index}`">Quantidade</span>
+              <div class="flex h-10 items-center rounded-lg border border-line" role="group" :aria-labelledby="`qty-${index}`">
+                <button type="button" class="flex h-full w-9 items-center justify-center hover:bg-canvas" @click="changeQuantity(index, -1)">
+                  <Minus class="size-4" aria-hidden="true" />
+                  <span class="sr-only">Diminuir</span>
+                </button>
+                <input
+                  v-model="item.quantity"
+                  type="number"
+                  min="1"
+                  inputmode="numeric"
+                  class="h-full w-16 border-x border-line bg-transparent text-center text-sm outline-none"
+                  :aria-labelledby="`qty-${index}`"
+                />
+                <button type="button" class="flex h-full w-9 items-center justify-center hover:bg-canvas" @click="changeQuantity(index, 1)">
+                  <Plus class="size-4" aria-hidden="true" />
+                  <span class="sr-only">Aumentar</span>
+                </button>
+              </div>
+              <p v-if="error?.firstError(`equipment.${index}.quantity`)" class="text-xs text-danger">
+                {{ error?.firstError(`equipment.${index}.quantity`) }}
+              </p>
+            </div>
+            <BaseButton variant="ghost" @click="items.splice(index, 1)">
+              <Trash2 class="size-4" aria-hidden="true" />
+              <span class="sr-only">Remover equipamento {{ index + 1 }}</span>
+            </BaseButton>
+          </li>
+        </ul>
+
+        <dl v-if="moduleTotalKwp || inverterTotalKw" class="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
+          <div v-if="moduleTotalKwp" class="flex gap-1.5">
+            <dt>Módulos:</dt>
+            <dd class="font-semibold text-ink">{{ formatNumber(moduleTotalKwp, 'kWp') }}</dd>
+          </div>
+          <div v-if="inverterTotalKw" class="flex gap-1.5">
+            <dt>Inversores:</dt>
+            <dd class="font-semibold text-ink">{{ formatNumber(inverterTotalKw, 'kW') }}</dd>
+          </div>
+        </dl>
       </section>
 
       <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-tech">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="sec-tech" class="font-semibold">Dados técnicos</h2>
+          <div class="flex items-center gap-3">
+            <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">3</span>
+            <h2 id="sec-tech" class="font-semibold">Dados técnicos</h2>
+          </div>
           <p v-if="generationType" class="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary" aria-live="polite">
             {{ generationType }} · potência de acesso {{ formatNumber(accessPower, 'kW') }}
           </p>
         </div>
+        <p class="text-sm text-muted">As potências são preenchidas automaticamente pela soma dos equipamentos. Você pode ajustar se precisar.</p>
         <SelectField
           v-model="form.modality"
           label="Modalidade de compensação"
@@ -204,7 +438,6 @@ async function submit() {
             label="Potência dos módulos (kWp)"
             type="number"
             required
-            :hint="moduleTotalKwp ? `Equipamentos somam ${formatNumber(moduleTotalKwp, 'kWp')}` : undefined"
             :error="error?.firstError('installed_power_kwp')"
           />
           <FormField
@@ -225,37 +458,33 @@ async function submit() {
           <input v-model="form.has_battery" type="checkbox" class="size-4 accent-primary" />
           Sistema com armazenamento (bateria)
         </label>
+        <TextareaField v-model="form.notes" label="Observações técnicas" :rows="3" :error="error?.firstError('notes')" />
       </section>
 
-      <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-eq">
-        <div class="flex items-center justify-between">
-          <h2 id="sec-eq" class="font-semibold">Equipamentos</h2>
-          <BaseButton variant="secondary" :disabled="items.length >= 30" @click="items.push({ id: '', quantity: '1' })">
-            <Plus class="size-4" aria-hidden="true" />
-            Adicionar
-          </BaseButton>
-        </div>
-        <p v-if="items.length === 0" class="text-sm text-muted">Nenhum equipamento vinculado. Cadastre itens em Cadastros técnicos.</p>
-        <div v-for="(item, index) in items" :key="index" class="grid items-end gap-3 sm:grid-cols-[1fr_8rem_auto]">
-          <SelectField v-model="item.id" :label="`Equipamento ${index + 1}`" placeholder="Selecione" :options="equipmentOptions" :error="error?.firstError(`equipment.${index}.id`)" />
-          <FormField v-model="item.quantity" label="Quantidade" type="number" :error="error?.firstError(`equipment.${index}.quantity`)" />
-          <BaseButton variant="ghost" @click="items.splice(index, 1)">
-            <Trash2 class="size-4" aria-hidden="true" />
-            <span class="sr-only">Remover equipamento {{ index + 1 }}</span>
-          </BaseButton>
-        </div>
-      </section>
-
-      <section class="rounded-2xl border border-line bg-surface p-6">
-        <TextareaField v-model="form.notes" label="Observações técnicas" :rows="4" :error="error?.firstError('notes')" />
-      </section>
-
-      <div class="flex justify-end gap-2">
-        <RouterLink to="/projetos" class="inline-flex h-10 items-center rounded-lg border border-line px-4 text-sm font-medium hover:bg-canvas">
+      <div class="sticky bottom-0 -mx-2 flex justify-end gap-2 border-t border-line bg-canvas/95 px-2 py-4 backdrop-blur">
+        <RouterLink to="/projetos" class="inline-flex h-10 items-center rounded-lg border border-line px-4 text-sm font-medium hover:bg-surface">
           Cancelar
         </RouterLink>
         <BaseButton type="submit" :loading="submitting">{{ projectId ? 'Salvar alterações' : 'Criar projeto e abrir processo' }}</BaseButton>
       </div>
     </form>
+
+    <ClientFormDialog v-if="clientDialog" :client="null" @close="clientDialog = false" @saved="onClientSaved" />
+    <ConsumerUnitDialog
+      v-if="unitDialog && form.client_id"
+      :client-id="form.client_id"
+      :unit="null"
+      :distributors="distributors ?? []"
+      @close="unitDialog = false"
+      @saved="onUnitSaved"
+    />
+    <ResponsibleDialog v-if="responsibleDialog" :item="null" @close="responsibleDialog = false" @saved="onResponsibleSaved" />
+    <EquipmentDialog
+      v-if="equipmentDialog"
+      :item="null"
+      :default-type="equipmentDialog.type"
+      @close="equipmentDialog = null"
+      @saved="onEquipmentSaved"
+    />
   </div>
 </template>

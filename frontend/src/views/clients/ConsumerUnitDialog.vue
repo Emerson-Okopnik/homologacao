@@ -7,7 +7,7 @@ import { api, toApiError, type ApiError } from '@/lib/http'
 import type { ConsumerUnit, Distributor } from '@/types/api'
 
 const props = defineProps<{ clientId: string; unit: ConsumerUnit | null; distributors: Distributor[] }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+const emit = defineEmits<{ close: []; saved: [unit: ConsumerUnit] }>()
 
 const toText = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value))
 const toNumber = (value: string) => (value.trim() === '' ? null : Number(value.replace(',', '.')))
@@ -49,9 +49,10 @@ async function submit() {
     breaker_a: toNumber(form.breaker_a),
   }
   try {
-    if (props.unit) await api(`/consumer-units/${props.unit.id}`, { method: 'PUT', body })
-    else await api('/consumer-units', { method: 'POST', body })
-    emit('saved')
+    const result = props.unit
+      ? await api<{ data: ConsumerUnit }>(`/consumer-units/${props.unit.id}`, { method: 'PUT', body })
+      : await api<{ data: ConsumerUnit }>('/consumer-units', { method: 'POST', body })
+    emit('saved', result.data)
   } catch (e) {
     error.value = toApiError(e)
   } finally {

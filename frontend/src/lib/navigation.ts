@@ -47,7 +47,7 @@ export const navigation: NavSection[] = [
     items: [
       { label: 'Usuários', icon: Users, permission: 'users.view', to: '/usuarios' },
       { label: 'Auditoria', icon: ScrollText, permission: 'audit.view', to: '/auditoria' },
-      { label: 'Configurações', icon: Settings, permission: 'workflow.configure' },
+      { label: 'Configurações', icon: Settings, permission: 'workflow.configure', to: '/configuracoes' },
     ],
   },
 ]

@@ -118,6 +118,12 @@ export const router = createRouter({
           meta: { permission: 'audit.view', title: 'Auditoria' },
         },
         {
+          path: 'configuracoes',
+          name: 'settings',
+          component: () => import('@/views/settings/SettingsView.vue'),
+          meta: { permission: 'workflow.configure', title: 'Configurações' },
+        },
+        {
           path: 'acesso-negado',
           name: 'forbidden',
           component: () => import('@/views/ForbiddenView.vue'),
