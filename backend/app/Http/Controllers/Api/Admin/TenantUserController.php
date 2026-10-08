@@ -103,7 +103,9 @@ final class TenantUserController extends Controller
 
             if (array_key_exists('roles', $data)) {
                 $old = $model->roles->pluck('slug')->sort()->values()->all();
-                $new = collect($data['roles'])->sort()->values()->all();
+                /** @var list<string> $roles */
+                $roles = $data['roles'];
+                $new = collect($roles)->sort()->values()->all();
 
                 if ($old !== $new) {
                     $model->roles()->sync(Role::query()->whereIn('slug', $new)->pluck('id'));

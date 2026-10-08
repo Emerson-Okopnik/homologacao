@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Registry;
 
+use App\Domain\Shared\Validation\TaxDocument;
 use App\Domain\TechnicalResponsibles\Models\TechnicalResponsible;
 use App\Domain\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -39,7 +40,7 @@ final class TechnicalResponsibleController extends Controller
 
         $item = TechnicalResponsible::create($this->validated($request));
 
-        return TechnicalResponsibleResource::make($item)->response()->setStatusCode(201);
+        return TechnicalResponsibleResource::make($item->refresh())->response()->setStatusCode(201);
     }
 
     public function update(Request $request, TechnicalResponsible $technicalResponsible): TechnicalResponsibleResource
@@ -57,9 +58,17 @@ final class TechnicalResponsibleController extends Controller
     private function validated(Request $request, ?TechnicalResponsible $current = null): array
     {
         $request->merge(['state' => strtoupper((string) $request->input('state'))]);
+        if ($request->exists('cpf')) {
+            $request->merge(['cpf' => TaxDocument::digits((string) $request->input('cpf')) ?: null]);
+        }
 
         return $request->validate([
             'name' => ['required', 'string', 'max:200'],
+            'cpf' => ['nullable', 'digits:11', function ($attribute, $value, $fail) {
+                if (! TaxDocument::isValid('PF', $value)) {
+                    $fail('CPF inválido.');
+                }
+            }, Rule::unique('technical_responsibles')->where('tenant_id', app(TenantContext::class)->id())->ignore($current?->id)],
             'council' => ['required', Rule::in(['CREA', 'CFT'])],
             'registration' => [
                 'required', 'string', 'max:40',

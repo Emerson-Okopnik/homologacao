@@ -106,7 +106,9 @@ final class TenantRoleController extends Controller
 
             if (array_key_exists('permissions', $data)) {
                 $model->permissions()->sync($this->permissionIds($data['permissions']));
-                $newPermissions = collect($data['permissions'])->sort()->values()->all();
+                /** @var list<string> $permissions */
+                $permissions = $data['permissions'];
+                $newPermissions = collect($permissions)->sort()->values()->all();
 
                 if ($oldPermissions !== $newPermissions) {
                     $this->audit->log('role.permissions_changed', $model,

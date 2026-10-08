@@ -51,6 +51,7 @@ const allEquipment = computed(() => uniqueById([...createdEquipment.value, ...(l
 const equipmentById = computed(() => new Map(allEquipment.value.map((e) => [e.id, e])))
 
 const form = reactive({
+  name: '', installation_type: '',
   client_id: typeof route.query.client === 'string' ? route.query.client : '',
   consumer_unit_id: '',
   technical_responsible_id: '',
@@ -81,6 +82,7 @@ watch(
       createdClients.value.push(project.client as Client)
     }
     Object.assign(form, {
+      name: project.name ?? project.code, installation_type: project.installation_type ?? '',
       client_id: project.client?.id ?? '',
       consumer_unit_id: project.consumer_unit?.id ?? '',
       technical_responsible_id: project.technical_responsible?.id ?? '',
@@ -141,7 +143,7 @@ function totalKw(type: Equipment['type']) {
     const eq = equipmentById.value.get(item.id)
     return eq?.type === type && eq.power_w ? sum + (eq.power_w * Number(item.quantity || 0)) / 1000 : sum
   }, 0)
-  return Math.round(total * 100) / 100
+  return Math.round(total * 1000) / 1000
 }
 const moduleTotalKwp = computed(() => totalKw('module'))
 const inverterTotalKw = computed(() => totalKw('inverter'))
@@ -209,15 +211,16 @@ function addRow() {
 async function submit() {
   submitting.value = true
   error.value = null
-  const body = {
-    ...form,
-    technical_responsible_id: form.technical_responsible_id || null,
-    installed_power_kwp: numeric(form.installed_power_kwp),
-    inverter_power_kw: numeric(form.inverter_power_kw),
-    estimated_generation_kwh_month: numeric(form.estimated_generation_kwh_month),
-    equipment: items.value.filter((i) => i.id).map((i) => ({ id: i.id, quantity: Number(i.quantity) })),
-  }
   try {
+    const body = {
+      ...form,
+      name: form.name || undefined, installation_type: form.installation_type || null,
+      technical_responsible_id: form.technical_responsible_id || null,
+      installed_power_kwp: numeric(form.installed_power_kwp),
+      inverter_power_kw: numeric(form.inverter_power_kw),
+      estimated_generation_kwh_month: numeric(form.estimated_generation_kwh_month),
+      equipment: items.value.filter((i) => i.id).map((i) => ({ id: i.id, quantity: Number(i.quantity) })),
+    }
     const result = projectId.value
       ? await api<{ data: Project }>(`/projects/${projectId.value}`, { method: 'PUT', body })
       : await api<{ data: Project }>('/projects', { method: 'POST', body })
@@ -243,6 +246,7 @@ async function submit() {
     />
 
     <InlineAlert v-if="lookupError" :correlation-id="lookupError.correlationId">{{ lookupError.message }}</InlineAlert>
+    <RouterLink v-if="projectId" :to="`/projetos/${projectId}/dados-tecnicos`" class="mb-4 inline-block text-sm font-medium text-primary">Dados técnicos, ART/TRT e versões</RouterLink>
 
     <form v-else class="flex flex-col gap-6" novalidate @submit.prevent="submit">
       <InlineAlert v-if="error && Object.keys(error.errors).length === 0" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
@@ -251,6 +255,7 @@ async function submit() {
       <p v-if="notice" class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-ink" role="status">{{ notice }}</p>
 
       <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-holder">
+        <div class="grid gap-4 sm:grid-cols-2"><FormField v-model="form.name" label="Nome do projeto" :error="error?.firstError('name')" /><SelectField v-model="form.installation_type" label="Tipo de instalação" placeholder="Definir depois" :options="[{value:'rooftop',label:'Telhado'},{value:'ground',label:'Solo'},{value:'other',label:'Outra'}]" :error="error?.firstError('installation_type')" /></div>
         <div class="flex items-center gap-3">
           <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">1</span>
           <h2 id="sec-holder" class="font-semibold">Titular e unidade consumidora</h2>

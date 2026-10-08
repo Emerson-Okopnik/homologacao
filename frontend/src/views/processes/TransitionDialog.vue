@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
-import FormField from '@/components/ui/FormField.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextareaField from '@/components/ui/TextareaField.vue'
 import { api, toApiError, type ApiError } from '@/lib/http'
@@ -10,14 +9,13 @@ import type { HomologationProcess } from '@/types/api'
 const props = defineProps<{ process: HomologationProcess; initial?: string }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
-const status = ref(props.initial ?? props.process.allowed_transitions[0]?.value ?? '')
+const transitions = props.process.allowed_transitions.filter(t => !['enviado', 'vistoria_solicitada'].includes(t.stage_type ?? t.value))
+const status = ref(props.initial ?? transitions[0]?.value ?? '')
 const reason = ref('')
-const protocol = ref(props.process.protocol_number ?? '')
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
 
-const needsProtocol = computed(() => status.value === 'enviado')
-const needsReason = computed(() => ['cancelado', 'reprovado', 'pendencia_distribuidora'].includes(status.value))
+const needsReason = computed(() => ['cancelado', 'reprovado', 'pendencia_distribuidora', 'rascunho'].includes(transitions.find(t=>t.value===status.value)?.stage_type ?? status.value))
 
 async function submit() {
   submitting.value = true
@@ -25,7 +23,7 @@ async function submit() {
   try {
     await api(`/processes/${props.process.id}/transitions`, {
       method: 'POST',
-      body: { status: status.value, reason: reason.value || null, protocol_number: needsProtocol.value ? protocol.value || null : undefined },
+      body: { status: status.value, reason: reason.value || null },
     })
     emit('saved')
   } catch (e) {
@@ -44,16 +42,8 @@ async function submit() {
     <SelectField
       v-model="status"
       label="Nova etapa"
-      :options="process.allowed_transitions.map((t) => ({ value: t.value, label: t.label }))"
+      :options="transitions.map((t) => ({ value: t.value, label: t.label }))"
       :error="error?.firstError('status')"
-    />
-    <FormField
-      v-if="needsProtocol"
-      v-model="protocol"
-      label="Número do protocolo"
-      required
-      hint="Protocolo gerado pelo portal da distribuidora."
-      :error="error?.firstError('protocol_number')"
     />
     <TextareaField
       v-model="reason"

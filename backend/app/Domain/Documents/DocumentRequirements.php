@@ -27,6 +27,10 @@ final class DocumentRequirements
         'datasheet_bateria' => 'Datasheet do sistema de armazenamento',
         'estudo_protecao' => 'Estudo de proteção / coordenação',
         'outro' => 'Outro documento',
+        'comprovante_envio' => 'Comprovante de envio',
+        'orcamento_conexao' => 'Orçamento de conexão',
+        'relatorio_vistoria' => 'Relatório de vistoria',
+        'evidencia_conexao' => 'Evidência de conexão',
     ];
 
     /**

@@ -41,6 +41,9 @@ final class PendencyController extends Controller
     public function resolve(Request $request, ProcessPendency $pendency): PendencyResource
     {
         $this->authorize('homologations.manage');
+        if ($pendency->external_pending_item_id) {
+            throw new DomainException('Registre e confirme o envio da resposta na seção de acompanhamento da distribuidora.', 'external_response_required');
+        }
 
         if ($pendency->status === 'resolvida') {
             throw new DomainException('Esta pendência já foi resolvida.', 'pendency_resolved');

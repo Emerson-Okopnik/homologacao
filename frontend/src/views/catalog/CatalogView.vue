@@ -41,7 +41,7 @@ const distributors = computed(() => (data.value?.kind === 'distributors' ? (data
 
 const responsibleDialog = shallowRef<{ item: TechnicalResponsible | null } | null>(null)
 const equipmentDialog = shallowRef<{ item: Equipment | null } | null>(null)
-const distributorDialog = shallowRef<Distributor | null>(null)
+const distributorDialog = shallowRef<{ item: Distributor | null } | null>(null)
 
 const equipmentLabels = { module: 'Módulo', inverter: 'Inversor', battery: 'Bateria' }
 
@@ -62,6 +62,9 @@ function saved() {
         </BaseButton>
         <BaseButton v-if="active === 'equipment' && auth.can('projects.manage')" @click="equipmentDialog = { item: null }">
           <Plus class="size-4" aria-hidden="true" /> Novo equipamento
+        </BaseButton>
+        <BaseButton v-if="active === 'distributors' && auth.can('integrations.configure')" @click="distributorDialog = { item: null }">
+          <Plus class="size-4" aria-hidden="true" /> Nova distribuidora
         </BaseButton>
       </template>
     </PageHeader>
@@ -174,7 +177,7 @@ function saved() {
                 Portal da distribuidora
               </a>
             </td>
-            <td class="px-4 py-3">{{ d.state }}</td>
+            <td class="px-4 py-3">{{ d.state ?? '—' }}</td>
             <td class="px-4 py-3">{{ d.integration_mode_label }}</td>
             <td class="px-4 py-3">
               <StatusBadge :tone="d.has_credential ? 'success' : 'neutral'">{{ d.has_credential ? 'Configurada' : 'Não configurada' }}</StatusBadge>
@@ -183,10 +186,13 @@ function saved() {
               <StatusBadge :tone="d.active ? 'success' : 'neutral'">{{ d.active ? 'Ativa' : 'Inativa' }}</StatusBadge>
             </td>
             <td class="px-4 py-3 text-right">
-              <BaseButton v-if="auth.can('integrations.configure')" variant="ghost" @click="distributorDialog = d">
+              <BaseButton v-if="auth.can('integrations.configure')" variant="ghost" @click="distributorDialog = { item: d }">
                 Configurar<span class="sr-only"> {{ d.name }}</span>
               </BaseButton>
             </td>
+          </tr>
+          <tr v-if="!loading && distributors.length === 0">
+            <td colspan="6" class="px-4 py-12 text-center text-muted">Nenhuma distribuidora cadastrada.</td>
           </tr>
         </tbody>
       </table>
@@ -194,6 +200,6 @@ function saved() {
 
     <ResponsibleDialog v-if="responsibleDialog" :item="responsibleDialog.item" @close="responsibleDialog = null" @saved="saved" />
     <EquipmentDialog v-if="equipmentDialog" :item="equipmentDialog.item" @close="equipmentDialog = null" @saved="saved" />
-    <DistributorDialog v-if="distributorDialog" :item="distributorDialog" @close="distributorDialog = null" @saved="saved" />
+    <DistributorDialog v-if="distributorDialog" :item="distributorDialog.item" @close="distributorDialog = null" @saved="saved" />
   </div>
 </template>

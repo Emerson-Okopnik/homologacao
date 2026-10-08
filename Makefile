@@ -2,6 +2,7 @@
 
 DC = docker compose
 ART = $(DC) exec app php artisan
+TEST_ENV = -e APP_ENV=testing -e DB_DATABASE=homologa_test -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e MAIL_MAILER=array -e SANCTUM_STATEFUL_DOMAINS=localhost
 
 up:
 	$(DC) up -d
@@ -27,10 +28,10 @@ seed:
 	$(ART) db:seed
 
 test:
-	$(DC) exec app php artisan test
+	$(DC) exec -T $(TEST_ENV) app php artisan test
 
 test-coverage:
-	$(DC) exec app php artisan test --coverage --min=80
+	$(DC) exec -T $(TEST_ENV) app php -d pcov.enabled=1 artisan test --coverage --min=80
 
 lint:
 	$(DC) exec app vendor/bin/pint --test

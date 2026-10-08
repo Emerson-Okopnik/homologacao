@@ -2,7 +2,8 @@
 
 namespace App\Domain\Homologations;
 
-use App\Domain\Documents\DocumentRequirements;
+use App\Domain\Distributors\IntegrationService;
+use App\Domain\Distributors\Models\ExternalPendingItem;
 use App\Domain\Homologations\Enums\ProcessStatus;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\ProcessPendency;
@@ -24,56 +25,31 @@ final class ProcessWorkflow
      */
     public function readinessIssues(HomologationProcess $process): array
     {
-        $process->loadMissing(['project.technicalResponsible', 'project.equipment', 'currentDocuments', 'openPendencies']);
-        $project = $process->project;
-        $issues = [];
-
-        $rt = $project->technicalResponsible;
-        if (! $rt) {
-            $issues[] = 'Defina o responsável técnico do projeto.';
-        } elseif (! $rt->active || $rt->registration_status !== 'regular') {
-            $issues[] = "O responsável técnico {$rt->name} não está ativo/regular.";
-        }
-
-        $types = $project->equipment->pluck('type');
-        if (! $types->contains('module')) {
-            $issues[] = 'Informe os módulos fotovoltaicos do projeto.';
-        }
-        if (! $types->contains('inverter')) {
-            $issues[] = 'Informe os inversores do projeto.';
-        }
-        if ($project->has_battery && ! $types->contains('battery')) {
-            $issues[] = 'O projeto indica armazenamento, mas nenhuma bateria foi informada.';
-        }
-
-        $documents = $process->currentDocuments->keyBy('document_type');
-        foreach (DocumentRequirements::requiredFor($project) as $type) {
-            $doc = $documents->get($type);
-            $label = DocumentRequirements::label($type);
-            if (! $doc) {
-                $issues[] = "Documento obrigatório ausente: {$label}.";
-            } elseif ($doc->review_status !== 'aprovado') {
-                $issues[] = "Documento não aprovado na revisão interna: {$label}.";
-            }
-        }
-
-        $open = $process->openPendencies->count();
-        if ($open > 0) {
-            $issues[] = "Existem {$open} pendência(s) em aberto.";
-        }
-
-        return $issues;
+        return app(ValidationService::class)->issues($process);
     }
 
     /**
      * @param  array{reason?: string|null, protocol_number?: string|null}  $input
      */
-    public function transition(HomologationProcess $process, ProcessStatus $target, User $actor, array $input = []): HomologationProcess
+    public function transition(HomologationProcess $process, ProcessStatus|string $target, User $actor, array $input = []): HomologationProcess
     {
+        return DB::transaction(function () use ($process, $target, $actor, $input) {
+            $locked = HomologationProcess::query()->whereKey($process->id)->lockForUpdate()->firstOrFail();
+
+            return $this->transitionLocked($locked, $target, $actor, $input);
+        });
+    }
+
+    /** @param array<string, mixed> $input */
+    private function transitionLocked(HomologationProcess $process, ProcessStatus|string $target, User $actor, array $input): HomologationProcess
+    {
+        $stage = app(WorkflowDefinition::class)->stageFor($target instanceof ProcessStatus ? $target->value : $target);
+        $previousStage = $process->currentStage ?? app(WorkflowDefinition::class)->stageFor($process->status->value);
+        $target = ProcessStatus::from($stage->stage_type);
         $current = $process->status;
         $reason = isset($input['reason']) ? trim((string) $input['reason']) : null;
 
-        if (! $current->canTransitionTo($target)) {
+        if (! $previousStage->canTransitionTo($stage)) {
             throw new DomainException(
                 "Transição não permitida: {$current->label()} → {$target->label()}.",
                 'invalid_transition',
@@ -90,13 +66,14 @@ final class ProcessWorkflow
         }
 
         if ($target === ProcessStatus::ProntoParaEnvio) {
-            $issues = $this->readinessIssues($process);
-            if ($issues !== []) {
-                throw new DomainException('O dossiê ainda não está completo: '.implode(' ', $issues), 'process_not_ready');
-            }
+            app(ValidationService::class)->ensureReady($process);
         }
 
         if ($target === ProcessStatus::Enviado) {
+            $submission = $process->submissions()->where('uuid', $input['submission_id'] ?? '')->where('status', 'sent')->first();
+            if (! $submission) {
+                throw new DomainException('Prepare o envio e registre a confirmação com protocolo e comprovante.', 'submission_required');
+            }
             $protocol = trim((string) ($input['protocol_number'] ?? $process->protocol_number ?? ''));
             if ($protocol === '') {
                 throw new DomainException('Informe o número de protocolo da distribuidora para registrar o envio.', 'protocol_required');
@@ -108,9 +85,24 @@ final class ProcessWorkflow
             }
         }
 
-        return DB::transaction(function () use ($process, $target, $actor, $reason, $input, $current): HomologationProcess {
+        if ($target === ProcessStatus::VistoriaSolicitada && ! $process->submissions()->where('uuid', $input['submission_id'] ?? '')->where('kind', 'inspection')->where('status', 'sent')->exists()) {
+            throw new DomainException('Registre o envio da solicitação de vistoria.', 'inspection_submission_required');
+        }
+        if ($target === ProcessStatus::Conectado) {
+            $external = $process->externalProcess;
+            if (! $external || ! $external->inspections()->with('report')->get()->contains(fn ($inspection) => $inspection->isConnectionEvidence())) {
+                throw new DomainException('Registre uma vistoria aprovada, seu relatório revisado e a data de aprovação da conexão.', 'connection_evidence_required');
+            }
+            if ($process->openPendencies()->exists() || $external->pendingItems()->where('status', 'aberta')->exists()) {
+                throw new DomainException('Resolva as pendências antes de encerrar a conexão.', 'pendencies_open');
+            }
+        }
+
+        return DB::transaction(function () use ($process, $target, $actor, $reason, $input, $current, $stage): HomologationProcess {
             $process->status = $target;
             $process->status_changed_at = now();
+            $process->current_stage_id = $stage->id;
+            $process->completed_at = $target->isTerminal() ? now() : null;
 
             match ($target) {
                 ProcessStatus::Enviado => $this->markSubmitted($process, (string) ($input['protocol_number'] ?? $process->protocol_number)),
@@ -120,18 +112,22 @@ final class ProcessWorkflow
             };
 
             $process->save();
+            $process->stageHistory()->whereNull('left_at')->update(['left_at' => now()]);
+            $process->stageHistory()->create(['workflow_stage_id' => $stage->id, 'entered_at' => now(), 'changed_by' => $actor->id, 'notes' => $reason]);
 
             $process->history()->create([
-                'tenant_id' => $process->tenant_id,
                 'from_status' => $current->value,
                 'to_status' => $target->value,
                 'user_id' => $actor->id,
                 'reason' => $reason ?: null,
             ]);
 
-            if ($target === ProcessStatus::PendenciaDistribuidora) {
+            if ($target === ProcessStatus::PendenciaDistribuidora && empty($input['external_pending_item_id'])) {
+                $external = app(IntegrationService::class)->external($process);
+                $pending = ExternalPendingItem::create(['external_process_id' => $external->id, 'description' => $reason, 'status' => 'aberta']);
                 ProcessPendency::create([
                     'homologation_process_id' => $process->id,
+                    'external_pending_item_id' => $pending->id,
                     'origin' => 'distribuidora',
                     'title' => str($reason)->limit(180)->toString(),
                     'description' => $reason,

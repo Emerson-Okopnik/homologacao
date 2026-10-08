@@ -27,7 +27,7 @@ class TechnicalResponsible extends Model
     use BelongsToTenant;
     use HasPublicUuid;
 
-    protected $fillable = ['name', 'council', 'registration', 'state', 'email', 'phone', 'registration_status', 'active'];
+    protected $fillable = ['name', 'cpf', 'council', 'registration', 'state', 'email', 'phone', 'registration_status', 'active'];
 
     protected function casts(): array
     {

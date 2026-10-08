@@ -12,6 +12,10 @@ defineProps<{
 
 const model = defineModel<string>({ required: true })
 const id = useId()
+
+function onInput(event: Event) {
+  model.value = (event.target as HTMLInputElement).value
+}
 </script>
 
 <template>
@@ -19,7 +23,7 @@ const id = useId()
     <label :for="id" class="text-sm font-medium text-ink">{{ label }}</label>
     <input
       :id="id"
-      v-model="model"
+      :value="model"
       :type="type ?? 'text'"
       :autocomplete="autocomplete"
       :required="required"
@@ -27,6 +31,7 @@ const id = useId()
       :aria-describedby="error || hint ? `${id}-desc` : undefined"
       class="h-10 rounded-lg border bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       :class="error ? 'border-danger' : 'border-line'"
+      @input="onInput"
     />
     <p v-if="error" :id="`${id}-desc`" class="text-xs text-danger">{{ error }}</p>
     <p v-else-if="hint" :id="`${id}-desc`" class="text-xs text-muted">{{ hint }}</p>

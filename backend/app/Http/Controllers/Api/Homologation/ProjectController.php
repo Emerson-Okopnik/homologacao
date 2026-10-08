@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Api\Homologation;
 use App\Domain\Catalog\Models\EquipmentItem;
 use App\Domain\Clients\Models\Client;
 use App\Domain\ConsumerUnits\Models\ConsumerUnit;
-use App\Domain\Homologations\Enums\ProcessStatus;
-use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Homologations\HomologationService;
 use App\Domain\Projects\Models\SolarProject;
+use App\Domain\Projects\ProjectTechnicalData;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Domain\Shared\SequentialCode;
 use App\Domain\TechnicalResponsibles\Models\TechnicalResponsible;
@@ -48,7 +48,7 @@ final class ProjectController extends Controller
     {
         $this->authorize('projects.view');
 
-        return ProjectResource::make($project->load(['client', 'consumerUnit.distributor', 'technicalResponsible', 'equipment', 'process']));
+        return ProjectResource::make($project->load(['client', 'consumerUnit.distributor', 'technicalResponsible', 'equipment', 'process', 'processes']));
     }
 
     /**
@@ -68,26 +68,14 @@ final class ProjectController extends Controller
             ]);
             $this->syncEquipment($project, $data['equipment']);
 
-            $unit = ConsumerUnit::query()->findOrFail($project->consumer_unit_id);
-            $process = HomologationProcess::create([
-                'solar_project_id' => $project->id,
-                'distributor_id' => $unit->distributor_id,
-                'assigned_user_id' => $request->user()->id,
-                'code' => SequentialCode::next(HomologationProcess::class, 'HOM'),
-                'status' => ProcessStatus::Rascunho,
-            ]);
-            $process->history()->create([
-                'tenant_id' => $process->tenant_id,
-                'from_status' => null,
-                'to_status' => ProcessStatus::Rascunho->value,
-                'user_id' => $request->user()->id,
-                'reason' => 'Processo aberto com o cadastro do projeto.',
-            ]);
+            $project->refresh()->load('equipment', 'consumerUnit');
+            app(ProjectTechnicalData::class)->seedFromEquipment($project);
+            app(HomologationService::class)->open($project, $request->user());
 
             return $project;
         });
 
-        return ProjectResource::make($project->load(['client', 'consumerUnit.distributor', 'technicalResponsible', 'equipment', 'process']))
+        return ProjectResource::make($project->refresh()->load(['client', 'consumerUnit.distributor', 'technicalResponsible', 'equipment', 'process', 'processes']))
             ->response()->setStatusCode(201);
     }
 
@@ -95,19 +83,31 @@ final class ProjectController extends Controller
     {
         $this->authorize('projects.manage');
 
+        $project->assertEditable();
         $process = $project->process;
-        if ($process && ! $process->status->isEditable()) {
-            throw new DomainException(
-                "O projeto não pode ser alterado com o processo em \"{$process->status->label()}\".",
-                'project_locked',
-            );
-        }
 
         $data = $this->validated($request);
 
         DB::transaction(function () use ($project, $data, $process): void {
+            SolarProject::query()->whereKey($project->id)->lockForUpdate()->firstOrFail()->assertEditable();
+            $before = $project->equipment()->get()->mapWithKeys(fn ($e) => [$e->id => (int) $e->pivot->getAttribute('quantity')])->all();
+            $after = collect($data['equipment'])->mapWithKeys(fn ($e) => [$e['id'] => $e['quantity']])->all();
             $project->update($data['attributes']);
+            if ($project->wasChanged('consumer_unit_id')) {
+                $project->connectionData()->delete();
+            }
+            if ($project->wasChanged('consumer_unit_id') || $project->wasChanged('modality')) {
+                $project->compensation?->units()->delete();
+                $project->compensation()->update(['mode' => $project->modality]);
+            }
             $this->syncEquipment($project, $data['equipment']);
+            if ($before != $after) {
+                $project->arrays()->delete();
+                $project->inverters()->delete();
+                $project->storage()->delete();
+            }
+            $project->unsetRelations()->load('equipment', 'consumerUnit');
+            app(ProjectTechnicalData::class)->seedFromEquipment($project);
 
             if ($process) {
                 $unit = ConsumerUnit::query()->findOrFail($project->consumer_unit_id);
@@ -135,6 +135,8 @@ final class ProjectController extends Controller
     {
         $data = $request->validate([
             'client_id' => ['required', 'uuid'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'installation_type' => ['nullable', Rule::in(['rooftop', 'ground', 'other'])],
             'consumer_unit_id' => ['required', 'uuid'],
             'technical_responsible_id' => ['nullable', 'uuid'],
             'modality' => ['required', Rule::in(array_keys(SolarProject::MODALITIES))],
@@ -163,12 +165,14 @@ final class ProjectController extends Controller
             $rtId = TechnicalResponsible::query()->where('uuid', $data['technical_responsible_id'])->where('active', true)->firstOrFail()->id;
         }
 
+        /** @var list<array{id: string, quantity: int}> $selectedEquipment */
+        $selectedEquipment = $data['equipment'] ?? [];
         $equipmentIds = EquipmentItem::query()
-            ->whereIn('uuid', collect($data['equipment'] ?? [])->pluck('id'))
+            ->whereIn('uuid', collect($selectedEquipment)->pluck('id'))
             ->where('active', true)
             ->pluck('id', 'uuid');
 
-        $equipment = collect($data['equipment'] ?? [])->map(function ($e) use ($equipmentIds) {
+        $equipment = collect($selectedEquipment)->map(function ($e) use ($equipmentIds) {
             if (! $equipmentIds->has($e['id'])) {
                 throw new DomainException('Equipamento inválido ou inativo no catálogo.', 'equipment_invalid');
             }
@@ -186,6 +190,7 @@ final class ProjectController extends Controller
 
         return [
             'attributes' => [
+                ...array_intersect_key($data, array_flip(['name', 'installation_type'])),
                 'client_id' => $client->id,
                 'consumer_unit_id' => $unit->id,
                 'technical_responsible_id' => $rtId,

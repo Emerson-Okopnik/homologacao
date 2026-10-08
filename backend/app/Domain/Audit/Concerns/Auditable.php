@@ -3,7 +3,6 @@
 namespace App\Domain\Audit\Concerns;
 
 use App\Domain\Audit\AuditLogger;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 
 /**
@@ -16,11 +15,11 @@ trait Auditable
 {
     public static function bootAuditable(): void
     {
-        static::created(function (Model $model): void {
+        static::created(function (self $model): void {
             $model->writeAudit('created', null, $model->auditableAttributes($model->getAttributes()));
         });
 
-        static::updated(function (Model $model): void {
+        static::updated(function (self $model): void {
             $changes = $model->auditableAttributes($model->getChanges());
             unset($changes['updated_at']);
 
@@ -32,7 +31,7 @@ trait Auditable
             $model->writeAudit('updated', $model->auditableAttributes($old), $changes);
         });
 
-        static::deleted(function (Model $model): void {
+        static::deleted(function (self $model): void {
             $model->writeAudit('deleted', $model->auditableAttributes($model->getOriginal()), null);
         });
     }

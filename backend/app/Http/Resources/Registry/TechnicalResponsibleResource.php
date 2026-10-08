@@ -19,6 +19,7 @@ final class TechnicalResponsibleResource extends JsonResource
         return [
             'id' => $this->uuid,
             'name' => $this->name,
+            'cpf' => $this->cpf,
             'council' => $this->council,
             'registration' => $this->registration,
             'state' => $this->state,

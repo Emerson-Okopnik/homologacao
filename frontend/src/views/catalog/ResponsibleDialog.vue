@@ -11,6 +11,7 @@ const emit = defineEmits<{ close: []; saved: [item: TechnicalResponsible] }>()
 
 const form = reactive({
   name: props.item?.name ?? '',
+  cpf: props.item?.cpf ?? '',
   council: props.item?.council ?? 'CREA',
   registration: props.item?.registration ?? '',
   state: props.item?.state ?? '',
@@ -48,6 +49,7 @@ async function submit() {
     @submit="submit"
   >
     <FormField v-model="form.name" label="Nome" required :error="error?.firstError('name')" />
+    <FormField v-model="form.cpf" label="CPF" hint="Obrigatório para validar o dossiê de homologação." :error="error?.firstError('cpf')" />
     <div class="grid gap-4 sm:grid-cols-[7rem_1fr_5rem]">
       <SelectField
         v-model="form.council"

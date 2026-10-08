@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $contracted_demand_kw
  * @property int|null $breaker_a
  * @property bool $active
+ * @property-read Address|null $address
  */
 class ConsumerUnit extends Model
 {
@@ -39,7 +40,7 @@ class ConsumerUnit extends Model
     protected $fillable = [
         'client_id', 'distributor_id', 'number', 'street', 'address_number', 'complement', 'district',
         'city', 'state', 'zip', 'voltage_class', 'supply_type', 'installed_load_kw', 'contracted_demand_kw',
-        'breaker_a', 'active',
+        'breaker_a', 'active', 'address_id', 'voltage', 'neutral_voltage',
     ];
 
     protected function casts(): array
@@ -49,6 +50,7 @@ class ConsumerUnit extends Model
             'installed_load_kw' => 'decimal:2',
             'contracted_demand_kw' => 'decimal:2',
             'breaker_a' => 'integer',
+            'voltage' => 'decimal:2', 'neutral_voltage' => 'decimal:2',
         ];
     }
 
@@ -78,5 +80,11 @@ class ConsumerUnit extends Model
             $this->city,
             $this->state,
         ));
+    }
+
+    /** @return BelongsTo<Address, $this> */
+    public function address(): BelongsTo
+    {
+        return $this->belongsTo(Address::class);
     }
 }

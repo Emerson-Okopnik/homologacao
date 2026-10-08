@@ -24,7 +24,7 @@ final class CreateUser
             $roleIds = Role::query()->whereIn('slug', $roleSlugs)->pluck('id');
             $user->roles()->sync($roleIds);
 
-            $this->audit->log('user.roles_changed', $user, null, ['roles' => array_values($roleSlugs)]);
+            $this->audit->log('user.roles_changed', $user, null, ['roles' => $roleSlugs]);
 
             return $user->load('roles');
         });

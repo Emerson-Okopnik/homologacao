@@ -19,6 +19,7 @@ final class PendencyResource extends JsonResource
         return [
             'id' => $this->uuid,
             'origin' => $this->origin,
+            'external' => $this->external_pending_item_id !== null,
             'title' => $this->title,
             'description' => $this->description,
             'status' => $this->status,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import WorkflowConfigurationPanel from './WorkflowConfigurationPanel.vue'
 import { RouterLink } from 'vue-router'
 import { ArrowRight, FileCheck2, GitBranch, PlugZap } from '@lucide/vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
@@ -8,8 +9,9 @@ import { useApiQuery } from '@/composables/useApiQuery'
 import { api } from '@/lib/http'
 import type { Distributor, ProcessStatusMeta } from '@/types/api'
 
+const revision = ref(0)
 const { data, error, loading } = useApiQuery(
-  () => 'settings',
+  () => revision.value,
   async () => {
     const [statuses, documentTypes, distributors] = await Promise.all([
       api<{ data: ProcessStatusMeta[] }>('/process-statuses'),
@@ -21,7 +23,7 @@ const { data, error, loading } = useApiQuery(
 )
 
 const labelOf = computed(() => new Map((data.value?.statuses ?? []).map((s) => [s.value, s.label])))
-const integrated = computed(() => (data.value?.distributors ?? []).filter((d) => d.integration_mode !== 'manual').length)
+const integrated = computed(() => (data.value?.distributors ?? []).filter((d) => ['api', 'automation'].includes(d.integration_mode)).length)
 </script>
 
 <template>
@@ -32,6 +34,7 @@ const integrated = computed(() => (data.value?.distributors ?? []).filter((d) =>
     <p v-else-if="loading && !data" class="text-sm text-muted">Carregando configurações…</p>
 
     <div v-else-if="data" class="flex flex-col gap-6">
+      <WorkflowConfigurationPanel :distributors="data.distributors" :document-types="data.documentTypes" @saved="revision++" />
       <section class="rounded-2xl border border-line bg-surface p-6" aria-labelledby="cfg-workflow">
         <div class="mb-4 flex items-center gap-2">
           <GitBranch class="size-5 text-primary" aria-hidden="true" />
@@ -76,7 +79,7 @@ const integrated = computed(() => (data.value?.distributors ?? []).filter((d) =>
             <h2 id="cfg-int" class="font-semibold">Integrações com distribuidoras</h2>
           </div>
           <p class="text-sm text-muted">
-            {{ integrated }} de {{ data.distributors.length }} distribuidoras com integração configurada.
+            {{ integrated }} de {{ data.distributors.length }} distribuidoras com canal API ou automação selecionado.
           </p>
           <ul class="mt-4 flex flex-col gap-2 text-sm">
             <li v-for="d in data.distributors.slice(0, 6)" :key="d.id" class="flex items-center justify-between gap-2">

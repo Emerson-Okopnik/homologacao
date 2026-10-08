@@ -99,7 +99,7 @@ export interface Distributor {
   id: string
   code: string
   name: string
-  state: string
+  state: string | null
   integration_mode: string
   integration_mode_label: string
   portal_url: string | null
@@ -129,9 +129,14 @@ export interface ConsumerUnit {
     city: string
     state: string
     zip: string
+    utm_zone?: string | null
+    utm_x?: string | null
+    utm_y?: string | null
   }
   full_address: string
   voltage_class: string
+  voltage?: number | null
+  neutral_voltage?: number | null
   supply_type: string
   installed_load_kw: number | null
   contracted_demand_kw: number | null
@@ -159,6 +164,7 @@ export interface Client {
 export interface TechnicalResponsible {
   id: string
   name: string
+  cpf?: string | null
   council: string
   registration: string
   state: string
@@ -195,11 +201,12 @@ export type ProcessStatus =
   | 'cancelado'
 
 export interface ProcessStatusMeta {
-  value: ProcessStatus
+  value: string
+  stage_type?: ProcessStatus
   label: string
   on_board: boolean
   terminal: boolean
-  transitions: ProcessStatus[]
+  transitions: string[]
 }
 
 export interface ProjectSummaryProcess {
@@ -212,6 +219,10 @@ export interface ProjectSummaryProcess {
 export interface Project {
   id: string
   code: string
+  name?: string | null
+  installation_type?: string | null
+  status?: string
+  processes?: ProjectSummaryProcess[]
   generation_type: 'micro' | 'mini'
   modality: string
   modality_label: string
@@ -231,6 +242,8 @@ export interface Project {
 
 export interface ProcessDocument {
   id: string
+  process_id?: string | null
+  project?: { id: string; code: string; client?: string | null } | null
   document_type: string
   type_label: string
   version: number
@@ -239,6 +252,8 @@ export interface ProcessDocument {
   mime_type: string
   size_bytes: number
   sha256: string
+  issued_at?: string | null
+  expires_at?: string | null
   review_status: 'pendente' | 'aprovado' | 'reprovado'
   review_notes: string | null
   uploaded_by: string | null
@@ -251,6 +266,7 @@ export interface ProcessDocument {
 export interface Pendency {
   id: string
   origin: 'interna' | 'distribuidora'
+  external?: boolean
   title: string
   description: string | null
   status: 'aberta' | 'resolvida'
@@ -267,7 +283,9 @@ export interface HomologationProcess {
   code: string
   status: ProcessStatus
   status_label: string
-  allowed_transitions: Option<ProcessStatus>[]
+  stage_code?: string
+  priority?: string
+  allowed_transitions: Array<Option<string> & { stage_type?: ProcessStatus }>
   editable: boolean
   protocol_number: string | null
   due_date: string | null
@@ -283,7 +301,7 @@ export interface HomologationProcess {
   history?: Array<{ from_status: string | null; to_status: string; reason: string | null; user: string | null; created_at: string }>
   pendencies?: Pendency[]
   interactions?: Array<{ id: string; type: string; channel: string; description: string; user: string | null; occurred_at: string }>
-  checklist?: Array<{ type: string; label: string; required: boolean; document: ProcessDocument | null }>
+  checklist?: Array<{ id?: string; type: string | null; label: string; required: boolean; status?: string; notes?: string | null; document: ProcessDocument | null }>
   readiness_issues?: string[]
 }
 

@@ -8,9 +8,12 @@ use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Auth\PasswordResetController;
 use App\Http\Controllers\Api\Homologation\DashboardController;
 use App\Http\Controllers\Api\Homologation\DocumentController;
+use App\Http\Controllers\Api\Homologation\ExternalTrackingController;
 use App\Http\Controllers\Api\Homologation\PendencyController;
 use App\Http\Controllers\Api\Homologation\ProcessController;
 use App\Http\Controllers\Api\Homologation\ProjectController;
+use App\Http\Controllers\Api\Homologation\ProjectTechnicalController;
+use App\Http\Controllers\Api\Homologation\WorkflowConfigurationController;
 use App\Http\Controllers\Api\Registry\ClientController;
 use App\Http\Controllers\Api\Registry\ConsumerUnitController;
 use App\Http\Controllers\Api\Registry\DistributorController;
@@ -70,6 +73,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::put('consumer-units/{consumerUnit}', [ConsumerUnitController::class, 'update']);
 
     Route::get('distributors', [DistributorController::class, 'index']);
+    Route::post('distributors', [DistributorController::class, 'store']);
     Route::put('distributors/{distributor}', [DistributorController::class, 'update']);
 
     Route::get('technical-responsibles', [TechnicalResponsibleController::class, 'index']);
@@ -85,13 +89,41 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::post('projects', [ProjectController::class, 'store'])->middleware('throttle:30,1');
     Route::get('projects/{project}', [ProjectController::class, 'show']);
     Route::put('projects/{project}', [ProjectController::class, 'update']);
+    Route::get('projects/{project}/technical-data', [ProjectTechnicalController::class, 'show']);
+    Route::put('projects/{project}/technical-data', [ProjectTechnicalController::class, 'update']);
+    Route::post('projects/{project}/responsibility-terms', [ProjectTechnicalController::class, 'term']);
+    Route::post('projects/{project}/versions', [ProjectTechnicalController::class, 'freeze']);
+    Route::get('projects/{project}/versions/{version}', [ProjectTechnicalController::class, 'version']);
+    Route::post('projects/{project}/processes', [ProjectTechnicalController::class, 'open']);
+    Route::post('projects/{project}/documents', [DocumentController::class, 'storeProject']);
+
+    Route::get('workflow-configuration', [WorkflowConfigurationController::class, 'index']);
+    Route::post('workflow-stages', [WorkflowConfigurationController::class, 'saveStage']);
+    Route::put('workflow-stages/{stage}', [WorkflowConfigurationController::class, 'saveStage']);
+    Route::post('requirements', [WorkflowConfigurationController::class, 'saveRequirement']);
+    Route::put('requirements/{requirement}', [WorkflowConfigurationController::class, 'saveRequirement']);
+    Route::post('external-credentials', [WorkflowConfigurationController::class, 'credential']);
+    Route::post('checklist-items/{item}/review', [WorkflowConfigurationController::class, 'reviewChecklist']);
 
     Route::get('process-statuses', [ProcessController::class, 'statuses']);
+    Route::get('assignment-users', [ProcessController::class, 'assignmentUsers']);
     Route::get('processes', [ProcessController::class, 'index']);
     Route::get('processes/{process}', [ProcessController::class, 'show']);
     Route::patch('processes/{process}', [ProcessController::class, 'update']);
     Route::post('processes/{process}/transitions', [ProcessController::class, 'transition'])->middleware('throttle:60,1');
     Route::post('processes/{process}/interactions', [ProcessController::class, 'storeInteraction']);
+    Route::get('processes/{process}/tracking', [ExternalTrackingController::class, 'show']);
+    Route::post('processes/{process}/submissions', [ExternalTrackingController::class, 'prepare']);
+    Route::post('processes/{process}/submissions/{submission}/confirm', [ExternalTrackingController::class, 'confirm']);
+    Route::post('processes/{process}/submissions/{submission}/fail', [ExternalTrackingController::class, 'fail']);
+    Route::get('processes/{process}/submissions/{submission}/manifest', [ExternalTrackingController::class, 'manifest']);
+    Route::get('processes/{process}/submissions/{submission}/dossier', [ExternalTrackingController::class, 'dossier']);
+    Route::post('processes/{process}/external-status', [ExternalTrackingController::class, 'status']);
+    Route::post('processes/{process}/external-pendencies', [ExternalTrackingController::class, 'pending']);
+    Route::put('processes/{process}/external-pendencies/{pending}/response', [ExternalTrackingController::class, 'response']);
+    Route::post('processes/{process}/connection-budgets', [ExternalTrackingController::class, 'budget']);
+    Route::post('processes/{process}/inspections', [ExternalTrackingController::class, 'inspection']);
+    Route::put('processes/{process}/inspections/{inspection}', [ExternalTrackingController::class, 'inspection']);
     Route::post('processes/{process}/pendencies', [PendencyController::class, 'store']);
     Route::post('pendencies/{pendency}/resolve', [PendencyController::class, 'resolve']);
 

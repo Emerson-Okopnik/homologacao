@@ -9,8 +9,11 @@ import InteractionDialog from './InteractionDialog.vue'
 import PendencyDialog from './PendencyDialog.vue'
 import ReviewDialog from './ReviewDialog.vue'
 import TransitionDialog from './TransitionDialog.vue'
+import ProcessTrackingPanel from './ProcessTrackingPanel.vue'
+import DocumentUploadDialog from '@/views/documents/DocumentUploadDialog.vue'
+import ChecklistReviewDialog from './ChecklistReviewDialog.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
-import { api, buildUrl, toApiError, upload, type ApiError } from '@/lib/http'
+import { api, buildUrl, type ApiError } from '@/lib/http'
 import { formatDate, formatDateTime, formatDocument, formatNumber, statusTone } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
 import type { HomologationProcess, Pendency, ProcessDocument } from '@/types/api'
@@ -27,9 +30,11 @@ const interactionOpen = ref(false)
 const reviewing = shallowRef<ProcessDocument | null>(null)
 const uploadError = ref<ApiError | null>(null)
 const uploadingType = ref<string | null>(null)
+const uploading = shallowRef<{ initialType: string; initialFile: File } | null>(null)
+const checklistReview = ref<string | null>(null)
 
 const canManage = computed(() => auth.can('homologations.manage'))
-const checklistDone = computed(() => (process.value?.checklist ?? []).filter((c) => c.required && c.document?.review_status === 'aprovado').length)
+const checklistDone = computed(() => (process.value?.checklist ?? []).filter((c) => c.required && (c.status ?? c.document?.review_status) === 'aprovado').length)
 const checklistRequired = computed(() => (process.value?.checklist ?? []).filter((c) => c.required).length)
 const openPendencies = computed(() => (process.value?.pendencies ?? []).filter((p) => p.status === 'aberta'))
 
@@ -38,27 +43,17 @@ function reload() {
   pendencyDialog.value = null
   interactionOpen.value = false
   reviewing.value = null
+  uploading.value = null
+  checklistReview.value = null
   version.value++
 }
 
-async function onFile(type: string, event: Event) {
+function onFile(type: string | null, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !process.value) return
-  uploadingType.value = type
-  uploadError.value = null
-  const form = new FormData()
-  form.append('document_type', type)
-  form.append('file', file)
-  try {
-    await upload(`/processes/${process.value.id}/documents`, form)
-    version.value++
-  } catch (e) {
-    uploadError.value = toApiError(e)
-  } finally {
-    uploadingType.value = null
-    input.value = ''
-  }
+  if (!file || !type) return
+  uploading.value = { initialType: type, initialFile: file }
+  input.value = ''
 }
 
 const statusLabels: Record<string, string> = {
@@ -127,13 +122,14 @@ const interactionLabels: Record<string, string> = {
         </div>
         <div v-if="canManage && process.allowed_transitions.length" class="flex shrink-0 flex-wrap gap-2">
           <BaseButton
-            v-for="t in process.allowed_transitions.filter((t) => t.value !== 'cancelado').slice(0, 2)"
+            v-for="t in process.allowed_transitions.filter((t) => !['cancelado', 'enviado', 'vistoria_solicitada'].includes(t.stage_type ?? t.value)).slice(0, 2)"
             :key="t.value"
             @click="transition = { initial: t.value }"
           >
             {{ t.label }}
           </BaseButton>
           <BaseButton variant="secondary" @click="transition = {}">Outra etapa</BaseButton>
+          <a v-if="['pronto_para_envio', 'pendencia_distribuidora', 'aprovado'].includes(process.status)" href="#sec-tracking" class="self-center text-sm font-medium text-primary">Preparar envio</a>
         </div>
       </header>
 
@@ -155,7 +151,7 @@ const interactionLabels: Record<string, string> = {
               <InlineAlert :correlation-id="uploadError.correlationId">{{ uploadError.firstError('file') ?? uploadError.message }}</InlineAlert>
             </div>
             <ul class="divide-y divide-line">
-              <li v-for="item in process.checklist ?? []" :key="item.type" class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center">
+              <li v-for="item in process.checklist ?? []" :key="item.id ?? item.type ?? item.label" class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center">
                 <component
                   :is="item.document?.review_status === 'aprovado' ? CheckCircle2 : item.document?.review_status === 'reprovado' ? XCircle : CircleDashed"
                   class="size-5 shrink-0"
@@ -197,7 +193,7 @@ const interactionLabels: Record<string, string> = {
                     Revisar
                   </BaseButton>
                   <label
-                    v-if="process.editable && auth.can('documents.manage')"
+                    v-if="item.type && process.editable && auth.can('documents.manage')"
                     class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-medium hover:bg-canvas focus-within:ring-2 focus-within:ring-primary"
                   >
                     <Upload class="size-4" aria-hidden="true" />
@@ -211,6 +207,7 @@ const interactionLabels: Record<string, string> = {
                       @change="onFile(item.type, $event)"
                     />
                   </label>
+                  <BaseButton v-if="!item.type && item.id && canManage" variant="ghost" @click="checklistReview = item.id">Validar requisito</BaseButton>
                 </div>
               </li>
             </ul>
@@ -240,7 +237,7 @@ const interactionLabels: Record<string, string> = {
                     {{ p.resolution }} — {{ p.resolved_by }}
                   </p>
                 </div>
-                <BaseButton v-if="canManage && p.status === 'aberta'" variant="ghost" @click="pendencyDialog = { resolving: p }">Resolver</BaseButton>
+                <BaseButton v-if="canManage && p.status === 'aberta' && !p.external" variant="ghost" @click="pendencyDialog = { resolving: p }">Resolver</BaseButton>
               </li>
             </ul>
           </section>
@@ -265,6 +262,7 @@ const interactionLabels: Record<string, string> = {
 
         <aside class="flex flex-col gap-6">
           <section class="rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-proj">
+            <RouterLink v-if="process.project" :to="`/projetos/${process.project.id}/dados-tecnicos`" class="mb-3 inline-block text-sm font-medium text-primary">Dados técnicos, ART/TRT e versões</RouterLink>
             <div class="flex items-center justify-between">
               <h2 id="sec-proj" class="font-semibold">Projeto</h2>
               <RouterLink
@@ -329,10 +327,14 @@ const interactionLabels: Record<string, string> = {
         </aside>
       </div>
 
+      <div id="sec-tracking" class="mt-6 scroll-mt-6"><ProcessTrackingPanel :process="process" :revision="version" @saved="reload" /></div>
+
       <TransitionDialog v-if="transition" :process="process" :initial="transition.initial" @close="transition = null" @saved="reload" />
       <PendencyDialog v-if="pendencyDialog" :process-id="process.id" :resolving="pendencyDialog.resolving" @close="pendencyDialog = null" @saved="reload" />
       <InteractionDialog v-if="interactionOpen" :process-id="process.id" @close="interactionOpen = false" @saved="reload" />
       <ReviewDialog v-if="reviewing" :document="reviewing" @close="reviewing = null" @saved="reload" />
+      <DocumentUploadDialog v-if="uploading" :endpoint="`/processes/${process.id}/documents`" v-bind="uploading" @close="uploading = null" @saved="reload" />
+      <ChecklistReviewDialog v-if="checklistReview" :item-id="checklistReview" @close="checklistReview = null" @saved="reload" />
     </template>
   </div>
 </template>

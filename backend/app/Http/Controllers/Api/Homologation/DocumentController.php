@@ -3,17 +3,17 @@
 namespace App\Http\Controllers\Api\Homologation;
 
 use App\Domain\Documents\DocumentRequirements;
+use App\Domain\Documents\DocumentService;
 use App\Domain\Documents\Models\ProcessDocument;
 use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Projects\Models\SolarProject;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Homologation\DocumentResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -32,7 +32,7 @@ final class DocumentController extends Controller
         ]);
 
         $docs = ProcessDocument::query()
-            ->with(['process.project.client', 'uploader', 'reviewer'])
+            ->with(['process.project.client', 'project.client', 'uploader', 'reviewer'])
             ->where('is_current', true)
             ->when($filters['review_status'] ?? null, fn ($q, string $s) => $q->where('review_status', $s))
             ->when($filters['type'] ?? null, fn ($q, string $t) => $q->where('document_type', $t))
@@ -57,54 +57,33 @@ final class DocumentController extends Controller
     public function store(Request $request, HomologationProcess $process): JsonResponse
     {
         $this->authorize('documents.manage');
-
-        if (! $process->status->isEditable()) {
+        if (! $process->status->isEditable() && ! in_array($request->input('document_type'), ['comprovante_envio', 'orcamento_conexao', 'relatorio_vistoria', 'evidencia_conexao', 'outro'], true)) {
             throw new DomainException("Documentos não podem ser enviados com o processo em \"{$process->status->label()}\".", 'process_locked');
         }
+
+        return $this->upload($request, $process->project, $process);
+    }
+
+    public function storeProject(Request $request, SolarProject $project): JsonResponse
+    {
+        $this->authorize('documents.manage');
+        $project->assertEditable();
+
+        return $this->upload($request, $project);
+    }
+
+    private function upload(Request $request, SolarProject $project, ?HomologationProcess $process = null): JsonResponse
+    {
 
         $data = $request->validate([
             'document_type' => ['required', Rule::in(array_keys(DocumentRequirements::TYPES))],
             'file' => ['required', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png'],
+            'issued_at' => ['nullable', 'date', 'before_or_equal:today'], 'expires_at' => ['nullable', 'date', 'after_or_equal:issued_at'],
         ]);
 
-        $file = $request->file('file');
-        $hash = hash_file('sha256', $file->getRealPath());
+        $document = app(DocumentService::class)->upload($project, $process, $request->file('file'), $request->user(), $data);
 
-        $document = DB::transaction(function () use ($process, $data, $file, $hash, $request): ProcessDocument {
-            $previous = $process->documents()
-                ->where('document_type', $data['document_type'])
-                ->lockForUpdate()
-                ->orderByDesc('version')
-                ->first();
-
-            if ($previous && $previous->is_current && $previous->sha256 === $hash) {
-                throw new DomainException('Este arquivo é idêntico à versão atual.', 'document_duplicated');
-            }
-
-            $path = $file->storeAs(
-                "tenants/{$process->tenant_id}/processes/{$process->uuid}",
-                Str::uuid()->toString().'.'.$file->extension(),
-                self::DISK,
-            );
-
-            $process->documents()->where('document_type', $data['document_type'])->update(['is_current' => false]);
-
-            return ProcessDocument::create([
-                'homologation_process_id' => $process->id,
-                'document_type' => $data['document_type'],
-                'version' => ($previous?->version ?? 0) + 1,
-                'is_current' => true,
-                'original_name' => Str::limit($file->getClientOriginalName(), 250, ''),
-                'storage_path' => $path,
-                'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
-                'size_bytes' => $file->getSize(),
-                'sha256' => $hash,
-                'review_status' => 'pendente',
-                'uploaded_by' => $request->user()->id,
-            ]);
-        });
-
-        return DocumentResource::make($document->load('uploader'))->response()->setStatusCode(201);
+        return DocumentResource::make($document->refresh()->load(['uploader', 'reviewer']))->response()->setStatusCode(201);
     }
 
     public function review(Request $request, ProcessDocument $document): DocumentResource
@@ -118,6 +97,9 @@ final class DocumentController extends Controller
 
         if (! $document->is_current) {
             throw new DomainException('Somente a versão atual pode ser revisada.', 'document_not_current');
+        }
+        if ($data['review_status'] === 'aprovado' && (! $document->verifyHash() || ($document->expires_at && $document->expires_at->isBefore(today())))) {
+            throw new DomainException('O arquivo está ausente, divergente ou vencido.', 'document_invalid');
         }
 
         $document->forceFill([
@@ -135,6 +117,9 @@ final class DocumentController extends Controller
         $this->authorize('documents.view');
 
         abort_unless(Storage::disk(self::DISK)->exists($document->storage_path), 404, 'Arquivo não encontrado.');
+        if (! $document->verifyHash()) {
+            throw new DomainException('O conteúdo do arquivo diverge do hash registrado.', 'document_integrity_failed', 409);
+        }
 
         return Storage::disk(self::DISK)->download($document->storage_path, $document->original_name, [
             'Content-Type' => $document->mime_type,

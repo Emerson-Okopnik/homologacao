@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $resolved_by
  * @property Carbon|null $resolved_at
  * @property Carbon|null $created_at
+ * @property int|null $external_pending_item_id
  */
 class ProcessPendency extends Model
 {
@@ -31,7 +32,7 @@ class ProcessPendency extends Model
     use BelongsToTenant;
     use HasPublicUuid;
 
-    protected $fillable = ['homologation_process_id', 'origin', 'title', 'description', 'status', 'due_date', 'resolution', 'created_by'];
+    protected $fillable = ['homologation_process_id', 'origin', 'title', 'description', 'status', 'due_date', 'resolution', 'created_by', 'external_pending_item_id'];
 
     protected function casts(): array
     {

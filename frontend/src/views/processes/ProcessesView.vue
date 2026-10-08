@@ -35,7 +35,7 @@ const columns = computed(() => {
   const items = data.value?.processes ?? []
   return (data.value?.statuses ?? [])
     .filter((s) => s.on_board)
-    .map((s) => ({ ...s, items: items.filter((p) => p.status === s.value) }))
+    .map((s) => ({ ...s, items: items.filter((p) => (p.stage_code ?? p.status) === s.value) }))
 })
 
 const today = new Date().toISOString().slice(0, 10)

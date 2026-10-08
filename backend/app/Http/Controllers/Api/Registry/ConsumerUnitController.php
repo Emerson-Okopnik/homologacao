@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Registry;
 
 use App\Domain\Clients\Models\Client;
+use App\Domain\ConsumerUnits\Models\Address;
 use App\Domain\ConsumerUnits\Models\ConsumerUnit;
 use App\Domain\Distributors\Models\Distributor;
 use App\Domain\Shared\Exceptions\DomainException;
@@ -11,6 +12,7 @@ use App\Http\Resources\Registry\ConsumerUnitResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 final class ConsumerUnitController extends Controller
@@ -47,7 +49,12 @@ final class ConsumerUnitController extends Controller
         $data = $this->validated($request);
         $this->assertNotDuplicated($data);
 
-        $unit = ConsumerUnit::create($data);
+        $unit = DB::transaction(function () use ($data) {
+            $unit = ConsumerUnit::create(array_diff_key($data, array_flip(['utm_zone', 'utm_x', 'utm_y'])));
+            $this->syncAddress($unit, $data);
+
+            return $unit->refresh();
+        });
 
         return ConsumerUnitResource::make($unit->load(['client', 'distributor']))->response()->setStatusCode(201);
     }
@@ -59,7 +66,10 @@ final class ConsumerUnitController extends Controller
         $data = $this->validated($request);
         $this->assertNotDuplicated($data, $consumerUnit);
 
-        $consumerUnit->update($data);
+        DB::transaction(function () use ($consumerUnit, $data) {
+            $consumerUnit->update(array_diff_key($data, array_flip(['utm_zone', 'utm_x', 'utm_y'])));
+            $this->syncAddress($consumerUnit, $data);
+        });
 
         return ConsumerUnitResource::make($consumerUnit->load(['client', 'distributor']));
     }
@@ -118,6 +128,8 @@ final class ConsumerUnitController extends Controller
             'installed_load_kw' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'contracted_demand_kw' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'breaker_a' => ['nullable', 'integer', 'min:1', 'max:10000'],
+            'voltage' => ['nullable', 'numeric', 'gt:0', 'max:100000'], 'neutral_voltage' => ['nullable', 'numeric', 'gt:0', 'max:100000'],
+            'utm_zone' => ['nullable', 'regex:/^(?:[1-9]|[1-5][0-9]|60)[C-HJ-NP-X]$/'], 'utm_x' => ['nullable', 'numeric', 'between:100000,1000000'], 'utm_y' => ['nullable', 'numeric', 'between:0,10000000'],
             'active' => ['sometimes', 'boolean'],
         ]);
 
@@ -127,5 +139,18 @@ final class ConsumerUnitController extends Controller
         $data['state'] = strtoupper($data['state']);
 
         return $data;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function syncAddress(ConsumerUnit $unit, array $data): void
+    {
+        $attributes = ['street' => $unit->street, 'number' => $unit->address_number, 'complement' => $unit->complement, 'district' => $unit->district,
+            'city' => $unit->city, 'state' => $unit->state, 'zip_code' => $unit->zip, ...array_intersect_key($data, array_flip(['utm_zone', 'utm_x', 'utm_y']))];
+        if ($unit->address) {
+            $unit->address->update($attributes);
+        } else {
+            $unit->update(['address_id' => Address::create($attributes)->id]);
+        }
+        $unit->unsetRelation('address');
     }
 }

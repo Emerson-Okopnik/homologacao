@@ -3,9 +3,11 @@
 namespace App\Providers;
 
 use App\Domain\Audit\Redactor;
+use App\Domain\Homologations\WorkflowDefinition;
 use App\Domain\Tenancy\TenantContext;
 use App\Infrastructure\Secrets\EnvSecretProvider;
 use App\Infrastructure\Secrets\SecretProvider;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\ServiceProvider;
@@ -17,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // scoped: um contexto novo por request/job (inclusive em Octane/queue workers).
         $this->app->scoped(TenantContext::class);
+        $this->app->scoped(WorkflowDefinition::class);
         $this->app->singleton(Redactor::class);
 
         $this->app->singleton(SecretProvider::class, fn () => match (config('secrets.driver')) {
@@ -29,6 +32,6 @@ class AppServiceProvider extends ServiceProvider
     {
         Model::shouldBeStrict(! $this->app->isProduction());
         Model::automaticallyEagerLoadRelationships();
-        Date::useClass(\Carbon\CarbonImmutable::class);
+        Date::useClass(CarbonImmutable::class);
     }
 }

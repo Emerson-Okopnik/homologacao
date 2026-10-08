@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\Homologation;
 use App\Domain\Homologations\Enums\ProcessStatus;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\ProcessInteraction;
+use App\Domain\Homologations\Models\WorkflowStage;
 use App\Domain\Homologations\ProcessWorkflow;
+use App\Domain\Homologations\WorkflowDefinition;
 use App\Domain\Users\Enums\PermissionKey;
 use App\Domain\Users\Models\User;
 use App\Http\Controllers\Controller;
@@ -13,6 +15,7 @@ use App\Http\Resources\Homologation\ProcessResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 final class ProcessController extends Controller
@@ -24,7 +27,7 @@ final class ProcessController extends Controller
         $this->authorize('homologations.view');
 
         $filters = $request->validate([
-            'status' => ['sometimes', 'nullable', Rule::enum(ProcessStatus::class)],
+            'status' => ['sometimes', 'nullable', 'string', 'max:60'],
             'distributor' => ['sometimes', 'nullable', 'uuid'],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'board' => ['sometimes', 'boolean'],
@@ -32,9 +35,9 @@ final class ProcessController extends Controller
         ]);
 
         $query = HomologationProcess::query()
-            ->with(['distributor', 'assignee', 'project.client', 'project.consumerUnit'])
+            ->with(['distributor', 'assignee', 'project.client', 'project.consumerUnit', 'currentStage'])
             ->withCount('openPendencies')
-            ->when($filters['status'] ?? null, fn ($q, string $s) => $q->where('status', $s))
+            ->when($filters['status'] ?? null, fn ($q, string $s) => $q->whereHas('currentStage', fn ($stage) => $stage->where('code', $s)))
             ->when($filters['distributor'] ?? null, fn ($q, string $uuid) => $q->whereHas('distributor', fn ($d) => $d->where('uuid', $uuid)))
             ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where(fn ($w) => $w
                 ->where('code', 'ilike', "%{$s}%")
@@ -57,7 +60,7 @@ final class ProcessController extends Controller
         $this->authorize('homologations.view');
 
         $process->load([
-            'distributor', 'assignee', 'history.user', 'interactions.user',
+            'distributor', 'assignee', 'history.user', 'interactions.user', 'currentStage',
             'pendencies.author', 'pendencies.resolver',
             'currentDocuments.uploader', 'currentDocuments.reviewer',
             'project.client', 'project.consumerUnit.distributor', 'project.technicalResponsible', 'project.equipment',
@@ -72,6 +75,7 @@ final class ProcessController extends Controller
 
         $data = $request->validate([
             'assigned_user_id' => ['sometimes', 'nullable', 'uuid'],
+            'priority' => ['sometimes', Rule::in(['baixa', 'normal', 'alta', 'urgente'])],
             'due_date' => ['sometimes', 'nullable', 'date'],
             'protocol_number' => ['sometimes', 'nullable', 'string', 'max:80'],
             'justification' => ['nullable', 'string', 'max:1000'],
@@ -108,7 +112,18 @@ final class ProcessController extends Controller
             ]);
         }
 
-        $process->save();
+        DB::transaction(function () use ($process, $data): void {
+            if ($process->isDirty('assigned_user_id')) {
+                $process->assignments()->where('active', true)->whereIn('role', ['responsavel', 'homologador'])->update(['active' => false, 'revoked_at' => now()]);
+                if ($process->assigned_user_id) {
+                    $process->assignments()->create(['user_id' => $process->assigned_user_id, 'role' => 'responsavel', 'active' => true, 'assigned_at' => now()]);
+                }
+            }
+            if (isset($data['priority'])) {
+                $process->priority = $data['priority'];
+            }
+            $process->save();
+        });
 
         return $this->show($process);
     }
@@ -118,12 +133,12 @@ final class ProcessController extends Controller
         $this->authorize('homologations.manage');
 
         $data = $request->validate([
-            'status' => ['required', Rule::enum(ProcessStatus::class)],
+            'status' => ['required', 'string', 'max:60'],
             'reason' => ['nullable', 'string', 'max:2000'],
             'protocol_number' => ['nullable', 'string', 'max:80'],
         ]);
 
-        $this->workflow->transition($process, ProcessStatus::from($data['status']), $request->user(), $data);
+        $this->workflow->transition($process, $data['status'], $request->user(), $data);
 
         return $this->show($process->refresh());
     }
@@ -154,14 +169,22 @@ final class ProcessController extends Controller
      */
     public function statuses(): JsonResponse
     {
+        $this->authorize('homologations.view');
+        app(WorkflowDefinition::class)->provision();
+
         return response()->json([
-            'data' => array_map(fn (ProcessStatus $s) => [
-                'value' => $s->value,
-                'label' => $s->label(),
-                'on_board' => in_array($s, ProcessStatus::board(), true),
-                'terminal' => $s->isTerminal(),
-                'transitions' => array_map(fn ($t) => $t->value, $s->allowedTransitions()),
-            ], ProcessStatus::cases()),
+            'data' => WorkflowStage::where('active', true)->orderBy('order')->get()->map(fn ($s) => [
+                'value' => $s->code, 'label' => $s->name, 'stage_type' => $s->stage_type,
+                'on_board' => ! in_array($s->stage_type, ['cancelado', 'reprovado']),
+                'terminal' => in_array($s->stage_type, ['conectado', 'cancelado']), 'transitions' => $s->next_stage_rule_json['next'] ?? [],
+            ]),
         ]);
+    }
+
+    public function assignmentUsers(): JsonResponse
+    {
+        $this->authorize('homologations.manage');
+
+        return response()->json(['data' => User::where('active', true)->orderBy('name')->get()->map(fn ($user) => ['id' => $user->uuid, 'name' => $user->name])]);
     }
 }

@@ -10,6 +10,12 @@ x-php-app: &php-app
   working_dir: /var/www/backend
   volumes:
     - ./backend:/var/www/backend
+    - backend_vendor:/var/www/backend/vendor
+    - composer_cache:/tmp/composer-cache
+  environment:
+    COMPOSER_CACHE_DIR: /tmp/composer-cache
+    DB_HOST: postgres
+    DB_PORT: "5432"
   env_file:
     - ./backend/.env
   depends_on:
@@ -22,19 +28,30 @@ x-php-app: &php-app
   networks: [homologa]
 
 services:
+  php-init:
+    <<: *php-app
+    container_name: homologa-php-init
+    command: ["composer", "install", "--no-interaction", "--prefer-dist"]
+    restart: "no"
+
   app:
     <<: *php-app
     container_name: homologa-app
+    depends_on: &php-ready
+      php-init:
+        condition: service_completed_successfully
 
   queue:
     <<: *php-app
     container_name: homologa-queue
+    depends_on: *php-ready
     command: ["php", "artisan", "queue:work", "redis", "--sleep=1", "--tries=3", "--backoff=10,60,300", "--max-time=3600"]
     restart: unless-stopped
 
   scheduler:
     <<: *php-app
     container_name: homologa-scheduler
+    depends_on: *php-ready
     command: ["php", "artisan", "schedule:work"]
     restart: unless-stopped
 
@@ -166,6 +183,8 @@ volumes:
   redis_data:
   minio_data:
   frontend_node_modules:
+  backend_vendor:
+  composer_cache:
 
 networks:
   homologa:

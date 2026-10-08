@@ -4,9 +4,14 @@ namespace App\Http\Resources\Homologation;
 
 use App\Domain\Documents\DocumentRequirements;
 use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Homologations\Models\WorkflowStage;
+use App\Domain\Homologations\ValidationService;
+use App\Domain\Homologations\WorkflowDefinition;
+use App\Domain\Projects\ProjectVersionService;
 use App\Http\Resources\Registry\DistributorResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Collection;
 
 /**
  * @mixin HomologationProcess
@@ -31,15 +36,18 @@ final class ProcessResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        /** @var WorkflowStage|null $stage */
+        $stage = $this->resource->getRelationValue('currentStage');
+
         return [
             'id' => $this->uuid,
             'code' => $this->code,
             'status' => $this->status->value,
-            'status_label' => $this->status->label(),
-            'allowed_transitions' => array_map(
-                fn ($s) => ['value' => $s->value, 'label' => $s->label()],
-                $this->status->allowedTransitions(),
-            ),
+            'status_label' => $stage !== null ? $stage->name : $this->status->label(),
+            'stage_code' => $stage !== null ? $stage->code : $this->status->value,
+            'priority' => $this->priority,
+            'process_type' => $this->process_type,
+            'allowed_transitions' => app(WorkflowDefinition::class)->transitions($this->resource)->map(fn ($s) => ['value' => $s->code, 'label' => $s->name, 'stage_type' => $s->stage_type])->values(),
             'editable' => $this->status->isEditable(),
             'protocol_number' => $this->protocol_number,
             'due_date' => $this->due_date?->toDateString(),
@@ -81,15 +89,17 @@ final class ProcessResource extends JsonResource
      */
     private function checklist(Request $request): array
     {
-        $required = DocumentRequirements::requiredFor($this->project);
-        $current = $this->currentDocuments->keyBy('document_type');
-        $types = array_values(array_unique([...$required, ...$current->keys()->all()]));
+        $items = app(ValidationService::class)->checklist($this->resource);
+        /** @var Collection<int, array<string, mixed>> $result */
+        $result = $items->filter(fn ($i) => $i->applicable)->map(fn ($i) => ['id' => $i->uuid, 'type' => $i->requirement->required_document_type, 'label' => $i->requirement->name,
+            'required' => true, 'status' => $i->status, 'notes' => $i->notes, 'document' => $i->document ? DocumentResource::make($i->document)->toArray($request) : null])->values();
+        $current = app(ProjectVersionService::class)->documents($this->project, $this->resource);
+        foreach ($current as $doc) {
+            if (! $result->contains(fn ($i) => $i['type'] === $doc->document_type)) {
+                $result->push(['type' => $doc->document_type, 'label' => DocumentRequirements::label($doc->document_type), 'required' => false, 'document' => DocumentResource::make($doc)->toArray($request)]);
+            }
+        }
 
-        return array_map(fn (string $type) => [
-            'type' => $type,
-            'label' => DocumentRequirements::label($type),
-            'required' => in_array($type, $required, true),
-            'document' => $current->has($type) ? DocumentResource::make($current->get($type))->toArray($request) : null,
-        ], $types);
+        return $result->all();
     }
 }

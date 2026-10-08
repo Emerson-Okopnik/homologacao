@@ -1,13 +1,14 @@
 <?php
 
+use App\Domain\Tenancy\TenantContext;
 use App\Domain\Users\Actions\ProvisionTenantRoles;
 use App\Domain\Users\Enums\PermissionKey;
 use App\Domain\Users\Enums\SystemRole;
 use App\Domain\Users\Models\Role;
-use App\Domain\Tenancy\TenantContext;
 
 beforeEach(function (): void {
     $this->tenant = tenantWithRoles();
+    app(TenantContext::class)->set($this->tenant);
 });
 
 it('provisiona os cinco perfis padrão de forma idempotente', function (): void {
@@ -56,13 +57,9 @@ it('gestor visualiza usuários mas não cria', function (): void {
         ->assertForbidden();
 });
 
-it('somente quem tem audit.view acessa a auditoria', function (): void {
-    $this->actingAs(userWithRole($this->tenant, SystemRole::Homologator), 'web')
-        ->getJson('/api/audit-logs')->assertForbidden();
-
-    $this->actingAs(userWithRole($this->tenant, SystemRole::Manager), 'web')
-        ->getJson('/api/audit-logs')->assertOk();
-});
+it('somente quem tem audit.view acessa a auditoria', function (SystemRole $role, int $status): void {
+    $this->actingAs(userWithRole($this->tenant, $role), 'web')->getJson('/api/audit-logs')->assertStatus($status);
+})->with([[SystemRole::Homologator, 403], [SystemRole::Manager, 200]]);
 
 it('administrador cria usuário com senha forte', function (): void {
     $this->actingAs(userWithRole($this->tenant, SystemRole::Administrator), 'web')

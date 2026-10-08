@@ -77,6 +77,12 @@ export const router = createRouter({
           meta: { permission: 'projects.manage', title: 'Editar projeto' },
         },
         {
+          path: 'projetos/:id/dados-tecnicos',
+          name: 'project-technical',
+          component: () => import('@/views/projects/ProjectTechnicalView.vue'),
+          meta: { permission: 'projects.view', title: 'Dados técnicos' },
+        },
+        {
           path: 'kanban',
           name: 'kanban',
           component: () => import('@/views/processes/ProcessesView.vue'),

@@ -21,6 +21,7 @@ final class ProjectResource extends JsonResource
         return [
             'id' => $this->uuid,
             'code' => $this->code,
+            'name' => $this->name, 'installation_type' => $this->installation_type, 'status' => $this->status,
             'generation_type' => $this->generation_type,
             'modality' => $this->modality,
             'modality_label' => SolarProject::MODALITIES[$this->modality] ?? $this->modality,
@@ -41,7 +42,7 @@ final class ProjectResource extends JsonResource
                 'manufacturer' => $item->manufacturer,
                 'model' => $item->model,
                 'power_w' => $item->power_w !== null ? (float) $item->power_w : null,
-                'quantity' => (int) $item->pivot->quantity,
+                'quantity' => (int) $item->pivot->getAttribute('quantity'),
             ])->values()),
             'process' => $this->whenLoaded('process', fn () => $this->process ? [
                 'id' => $this->process->uuid,
@@ -50,6 +51,7 @@ final class ProjectResource extends JsonResource
                 'status_label' => $this->process->status->label(),
             ] : null),
             'created_at' => $this->created_at?->toIso8601String(),
+            'processes' => $this->whenLoaded('processes', fn () => $this->processes->map(fn ($p) => ['id' => $p->uuid, 'code' => $p->code, 'status' => $p->status->value])->values()),
         ];
     }
 }

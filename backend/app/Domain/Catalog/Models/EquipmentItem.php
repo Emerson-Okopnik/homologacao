@@ -6,9 +6,11 @@ use App\Domain\Audit\Concerns\Auditable;
 use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
  * @property int $id
+ * @property Pivot $pivot
  * @property string $uuid
  * @property string $type
  * @property string $manufacturer

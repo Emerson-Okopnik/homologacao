@@ -28,14 +28,14 @@ const error = ref<ApiError | null>(null)
 async function submit() {
   submitting.value = true
   error.value = null
-  const body = {
-    ...form,
-    power_w: toNumber(form.power_w),
-    energy_kwh: toNumber(form.energy_kwh),
-    efficiency: toNumber(form.efficiency),
-    certification: form.certification || null,
-  }
   try {
+    const body = {
+      ...form,
+      power_w: toNumber(form.power_w),
+      energy_kwh: toNumber(form.energy_kwh),
+      efficiency: toNumber(form.efficiency),
+      certification: form.certification || null,
+    }
     const result = props.item
       ? await api<{ data: Equipment }>(`/equipment/${props.item.id}`, { method: 'PUT', body })
       : await api<{ data: Equipment }>('/equipment', { method: 'POST', body })

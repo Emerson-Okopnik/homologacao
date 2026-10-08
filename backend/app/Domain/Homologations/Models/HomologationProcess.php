@@ -4,16 +4,20 @@ namespace App\Domain\Homologations\Models;
 
 use App\Domain\Audit\Concerns\Auditable;
 use App\Domain\Distributors\Models\Distributor;
+use App\Domain\Distributors\Models\ExternalProcess;
+use App\Domain\Distributors\Models\ExternalSubmission;
+use App\Domain\Distributors\Models\IntegrationEvent;
 use App\Domain\Documents\Models\ProcessDocument;
 use App\Domain\Homologations\Enums\ProcessStatus;
 use App\Domain\Projects\Models\SolarProject;
 use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\Users\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property int $id
@@ -25,13 +29,15 @@ use Illuminate\Support\Carbon;
  * @property string $code
  * @property ProcessStatus $status
  * @property string|null $protocol_number
- * @property Carbon|null $status_changed_at
- * @property Carbon|null $submitted_at
- * @property Carbon|null $approved_at
- * @property Carbon|null $connected_at
- * @property Carbon|null $due_date
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonInterface|null $status_changed_at
+ * @property CarbonInterface|null $submitted_at
+ * @property CarbonInterface|null $approved_at
+ * @property CarbonInterface|null $connected_at
+ * @property CarbonInterface|null $due_date
+ * @property CarbonInterface|null $created_at
+ * @property CarbonInterface|null $updated_at
+ * @property-read WorkflowStage|null $currentStage
+ * @property-read ExternalProcess|null $externalProcess
  */
 class HomologationProcess extends Model
 {
@@ -39,7 +45,7 @@ class HomologationProcess extends Model
     use BelongsToTenant;
     use HasPublicUuid;
 
-    protected $fillable = ['solar_project_id', 'distributor_id', 'assigned_user_id', 'code', 'status', 'protocol_number', 'due_date'];
+    protected $fillable = ['solar_project_id', 'distributor_id', 'assigned_user_id', 'code', 'status', 'protocol_number', 'due_date', 'current_stage_id', 'priority', 'opened_at', 'completed_at', 'process_type'];
 
     protected function casts(): array
     {
@@ -50,6 +56,7 @@ class HomologationProcess extends Model
             'approved_at' => 'datetime',
             'connected_at' => 'datetime',
             'due_date' => 'date',
+            'opened_at' => 'datetime', 'completed_at' => 'datetime',
         ];
     }
 
@@ -123,5 +130,47 @@ class HomologationProcess extends Model
     public function interactions(): HasMany
     {
         return $this->hasMany(ProcessInteraction::class)->latest('occurred_at');
+    }
+
+    /** @return BelongsTo<WorkflowStage, $this> */
+    public function currentStage(): BelongsTo
+    {
+        return $this->belongsTo(WorkflowStage::class, 'current_stage_id');
+    }
+
+    /** @return HasMany<ProcessStageHistory, $this> */
+    public function stageHistory(): HasMany
+    {
+        return $this->hasMany(ProcessStageHistory::class)->orderBy('id');
+    }
+
+    /** @return HasMany<ProcessAssignment, $this> */
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(ProcessAssignment::class)->orderByDesc('id');
+    }
+
+    /** @return HasMany<ChecklistItem, $this> */
+    public function checklistItems(): HasMany
+    {
+        return $this->hasMany(ChecklistItem::class);
+    }
+
+    /** @return HasOne<ExternalProcess, $this> */
+    public function externalProcess(): HasOne
+    {
+        return $this->hasOne(ExternalProcess::class);
+    }
+
+    /** @return HasMany<ExternalSubmission, $this> */
+    public function submissions(): HasMany
+    {
+        return $this->hasMany(ExternalSubmission::class)->orderByDesc('id');
+    }
+
+    /** @return HasMany<IntegrationEvent, $this> */
+    public function integrationEvents(): HasMany
+    {
+        return $this->hasMany(IntegrationEvent::class)->orderByDesc('id');
     }
 }

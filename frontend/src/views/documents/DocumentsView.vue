@@ -80,7 +80,8 @@ function onReviewed() {
                 <RouterLink v-if="doc.process" :to="`/processos/${doc.process.id}`" class="font-mono text-xs font-medium hover:text-primary hover:underline">
                   {{ doc.process.code }}
                 </RouterLink>
-                <p class="text-xs text-muted">{{ doc.process?.client }}</p>
+                <RouterLink v-else-if="doc.project" :to="`/projetos/${doc.project.id}/dados-tecnicos`" class="text-xs text-primary">{{ doc.project.code }} · Documento do projeto</RouterLink>
+                <p class="text-xs text-muted">{{ doc.process?.client ?? doc.project?.client }}</p>
               </td>
               <td class="px-4 py-3 text-xs text-muted">
                 {{ formatDateTime(doc.created_at) }}
