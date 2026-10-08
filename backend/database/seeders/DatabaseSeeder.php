@@ -49,5 +49,7 @@ class DatabaseSeeder extends Seeder
             User::query()->where('email', 'admin@homologa.local')->first()
                 ?->forceFill(['is_super_admin' => true])->save();
         });
+
+        $this->call(RulesSeeder::class);
     }
 }
