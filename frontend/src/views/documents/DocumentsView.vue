@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, reactive, ref, shallowRef, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { Download } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
@@ -77,10 +76,12 @@ function onReviewed() {
                 <p class="max-w-xs truncate text-xs text-muted">{{ doc.original_name }} · {{ formatBytes(doc.size_bytes) }}</p>
               </td>
               <td class="px-4 py-3">
-                <RouterLink v-if="doc.process" :to="`/processos/${doc.process.id}`" class="font-mono text-xs font-medium hover:text-primary hover:underline">
-                  {{ doc.process.code }}
-                </RouterLink>
-                <p class="text-xs text-muted">{{ doc.process?.client }}</p>
+                <ul v-if="doc.links?.length" class="flex flex-col gap-0.5 text-xs">
+                  <li v-for="(link, i) in doc.links" :key="i" :class="link.is_current ? 'font-medium' : 'text-muted line-through'">
+                    {{ link.label ?? link.type }}
+                  </li>
+                </ul>
+                <span v-else class="text-xs text-muted">Sem vínculo</span>
               </td>
               <td class="px-4 py-3 text-xs text-muted">
                 {{ formatDateTime(doc.created_at) }}

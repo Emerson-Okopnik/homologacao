@@ -10,57 +10,79 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { api } from '@/lib/http'
-import { formatDate, formatNumber, statusTone } from '@/lib/format'
-import type { HomologationProcess, ProcessStatusMeta } from '@/types/api'
+import { formatDate, formatNumber, stageTone } from '@/lib/format'
+import type { HomologationProcess, StageCatalog } from '@/types/api'
 
 const route = useRoute()
 const mode = computed<'board' | 'list'>(() => (route.name === 'kanban' ? 'board' : 'list'))
 
 const search = ref('')
 const debounced = useDebouncedRef(search, 300)
+const stage = ref('')
 const status = ref('')
 
-const source = computed(() => ({ search: debounced.value, status: mode.value === 'list' ? status.value : '', mode: mode.value }))
+const statusOptions = [
+  { value: 'ACTIVE', label: 'Em andamento' },
+  { value: 'COMPLETED', label: 'Concluído' },
+  { value: 'CANCELLED', label: 'Cancelado' },
+]
+
+const source = computed(() => ({
+  search: debounced.value,
+  stage: mode.value === 'list' ? stage.value : '',
+  status: mode.value === 'list' ? status.value : '',
+  mode: mode.value,
+}))
+
 const { data, error, loading } = useApiQuery(source, async (s) => {
-  const [statuses, processes] = await Promise.all([
-    api<{ data: ProcessStatusMeta[] }>('/process-statuses'),
+  const [catalog, processes] = await Promise.all([
+    api<{ data: StageCatalog }>('/process-stages'),
     api<{ data: HomologationProcess[] }>('/processes', {
-      query: { search: s.search || undefined, status: s.status || undefined, board: s.mode === 'board' ? 1 : undefined, per_page: 200 },
+      query: {
+        search: s.search || undefined,
+        stage: s.stage || undefined,
+        status: s.status || undefined,
+        board: s.mode === 'board' ? 1 : undefined,
+        per_page: 200,
+      },
     }),
   ])
-  return { statuses: statuses.data, processes: processes.data }
+  return { stages: catalog.data.stages, processes: processes.data }
 })
 
 const columns = computed(() => {
   const items = data.value?.processes ?? []
-  return (data.value?.statuses ?? [])
-    .filter((s) => s.on_board)
-    .map((s) => ({ ...s, items: items.filter((p) => p.status === s.value) }))
+  return (data.value?.stages ?? []).map((s) => ({ ...s, items: items.filter((p) => p.stage === s.value) }))
 })
 
-const today = new Date().toISOString().slice(0, 10)
-const isOverdue = (p: HomologationProcess) => !!p.due_date && p.due_date < today && !['conectado', 'cancelado', 'reprovado'].includes(p.status)
+const isOverdue = (p: HomologationProcess) => !!p.open_deadline?.overdue
+const badgeLabel = (p: HomologationProcess) => (p.status === 'ACTIVE' ? p.stage_label : p.status_label)
 </script>
 
 <template>
   <div class="mx-auto" :class="mode === 'board' ? 'max-w-none' : 'max-w-6xl'">
     <PageHeader
       :title="mode === 'board' ? 'Kanban de homologações' : 'Processos de homologação'"
-      :description="mode === 'board' ? 'Acompanhe cada processo pela etapa atual. Clique em um card para ver detalhes e avançar.' : 'Todos os processos, incluindo encerrados.'"
+      :description="mode === 'board' ? 'Processos em andamento agrupados pela etapa operacional. Clique em um card para ver detalhes e as próximas ações.' : 'Todos os processos, incluindo concluídos e cancelados.'"
     />
 
     <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
       <div class="sm:w-80">
         <SearchInput v-model="search" label="Buscar processos" placeholder="Código, protocolo, cliente ou UC" />
       </div>
-      <div v-if="mode === 'list'" class="sm:w-60">
-        <SelectField
-          v-model="status"
-          label="Status"
-          placeholder="Todos os status"
-          :options="(data?.statuses ?? []).map((s) => ({ value: s.value, label: s.label }))"
-        />
-      </div>
+      <template v-if="mode === 'list'">
+        <div class="sm:w-56">
+          <SelectField
+            v-model="stage"
+            label="Etapa"
+            placeholder="Todas as etapas"
+            :options="(data?.stages ?? []).map((s) => ({ value: s.value, label: s.label }))"
+          />
+        </div>
+        <div class="sm:w-48">
+          <SelectField v-model="status" label="Situação" placeholder="Todas" :options="statusOptions" />
+        </div>
+      </template>
     </div>
 
     <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
@@ -90,16 +112,23 @@ const isOverdue = (p: HomologationProcess) => !!p.due_date && p.due_date < today
                 </span>
               </div>
               <p class="mt-1 truncate text-sm font-semibold">{{ p.project?.client?.name }}</p>
-              <p class="truncate text-xs text-muted">
-                UC {{ p.project?.consumer_unit?.number }} · {{ p.distributor?.name }}
-              </p>
-              <div class="mt-3 flex items-center justify-between text-xs">
-                <span class="tabular-nums font-medium">{{ formatNumber(p.project?.installed_power_kwp, 'kWp') }}</span>
-                <span v-if="p.due_date" class="inline-flex items-center gap-1 tabular-nums" :class="isOverdue(p) ? 'font-semibold text-danger' : 'text-muted'">
+              <p class="truncate text-xs text-muted">UC {{ p.project?.consumer_unit?.number }} · {{ p.distributor?.name }}</p>
+              <div class="mt-3 flex items-center justify-between gap-2 text-xs">
+                <span class="tabular-nums font-medium">
+                  {{ formatNumber(p.project?.considered_power_kw, 'kW') }}
+                  <span v-if="p.project?.classification_label" class="font-normal text-muted">· {{ p.project.classification_label }}</span>
+                </span>
+                <span
+                  v-if="p.open_deadline"
+                  class="inline-flex items-center gap-1 tabular-nums"
+                  :class="isOverdue(p) ? 'font-semibold text-danger' : 'text-muted'"
+                  :title="p.open_deadline.label"
+                >
                   <CalendarClock class="size-3.5" aria-hidden="true" />
-                  {{ formatDate(p.due_date) }}<span v-if="isOverdue(p)" class="sr-only"> (atrasado)</span>
+                  {{ formatDate(p.open_deadline.due_at) }}<span v-if="isOverdue(p)" class="sr-only"> (atrasado)</span>
                 </span>
               </div>
+              <p v-if="p.network_work_status !== 'NOT_REQUIRED'" class="mt-2 text-xs text-muted">Obra: {{ p.network_work_label }}</p>
               <p v-if="p.assignee" class="mt-2 truncate border-t border-line pt-2 text-xs text-muted">{{ p.assignee.name }}</p>
             </RouterLink>
           </li>
@@ -118,7 +147,7 @@ const isOverdue = (p: HomologationProcess) => !!p.due_date && p.due_date < today
             <th scope="col" class="px-4 py-3">Cliente / UC</th>
             <th scope="col" class="px-4 py-3">Distribuidora</th>
             <th scope="col" class="px-4 py-3">Protocolo</th>
-            <th scope="col" class="px-4 py-3">Status</th>
+            <th scope="col" class="px-4 py-3">Etapa</th>
             <th scope="col" class="px-4 py-3">Prazo</th>
           </tr>
         </thead>
@@ -133,8 +162,14 @@ const isOverdue = (p: HomologationProcess) => !!p.due_date && p.due_date < today
             </td>
             <td class="px-4 py-3">{{ p.distributor?.name }}</td>
             <td class="px-4 py-3 font-mono text-xs">{{ p.protocol_number ?? '—' }}</td>
-            <td class="px-4 py-3"><StatusBadge :tone="statusTone(p.status)">{{ p.status_label }}</StatusBadge></td>
-            <td class="px-4 py-3 tabular-nums" :class="isOverdue(p) ? 'font-semibold text-danger' : 'text-muted'">{{ formatDate(p.due_date) }}</td>
+            <td class="px-4 py-3"><StatusBadge :tone="stageTone(p.stage, p.status)">{{ badgeLabel(p) }}</StatusBadge></td>
+            <td class="px-4 py-3 tabular-nums" :class="isOverdue(p) ? 'font-semibold text-danger' : 'text-muted'">
+              <template v-if="p.open_deadline">
+                {{ formatDate(p.open_deadline.due_at) }}
+                <span class="block text-xs font-normal text-muted">{{ p.open_deadline.label }}</span>
+              </template>
+              <template v-else>—</template>
+            </td>
           </tr>
           <tr v-if="!loading && data && data.processes.length === 0">
             <td colspan="6" class="px-4 py-12 text-center text-muted">Nenhum processo encontrado.</td>

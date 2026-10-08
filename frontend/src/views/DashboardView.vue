@@ -7,7 +7,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api } from '@/lib/http'
-import { formatDateTime, formatNumber, statusTone } from '@/lib/format'
+import { formatDateTime, formatNumber, stageTone } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
 import type { DashboardData } from '@/types/api'
 
@@ -25,11 +25,11 @@ const kpis = computed(() => {
   return [
     { label: 'Processos ativos', value: formatNumber(t.active), icon: Zap, tone: 'text-primary bg-primary-soft' },
     { label: 'Aguardando distribuidora', value: formatNumber(t.waiting_distributor), icon: Hourglass, tone: 'text-primary bg-primary-soft' },
-    { label: 'Com pendências', value: formatNumber(t.with_pendencies), icon: AlertTriangle, tone: 'text-warning bg-warning-soft' },
+    { label: 'Em correção', value: formatNumber(t.in_correction), icon: AlertTriangle, tone: 'text-warning bg-warning-soft' },
     { label: 'Prazos vencidos', value: formatNumber(t.overdue), icon: CalendarX, tone: 'text-danger bg-danger-soft' },
     { label: 'Documentos para revisar', value: formatNumber(t.documents_to_review), icon: FileSearch, tone: 'text-warning bg-warning-soft' },
-    { label: 'Sistemas conectados', value: formatNumber(t.connected), icon: PlugZap, tone: 'text-success bg-success-soft' },
-    { label: 'Potência conectada', value: formatNumber(t.connected_power_kwp, 'kWp'), icon: Zap, tone: 'text-success bg-success-soft' },
+    { label: 'Processos concluídos', value: formatNumber(t.completed), icon: PlugZap, tone: 'text-success bg-success-soft' },
+    { label: 'Potência concluída', value: formatNumber(t.completed_power_kw, 'kW'), icon: Zap, tone: 'text-success bg-success-soft' },
     {
       label: 'Tempo médio até aprovação',
       value: t.avg_approval_days === null ? '—' : `${formatNumber(t.avg_approval_days)} dias`,
@@ -39,7 +39,7 @@ const kpis = computed(() => {
   ]
 })
 
-const maxStatus = computed(() => Math.max(1, ...(data.value?.by_status ?? []).map((s) => s.total)))
+const maxStatus = computed(() => Math.max(1, ...(data.value?.by_stage ?? []).map((s) => s.total)))
 </script>
 
 <template>
@@ -79,7 +79,7 @@ const maxStatus = computed(() => Math.max(1, ...(data.value?.by_status ?? []).ma
             <RouterLink to="/kanban" class="text-sm font-medium text-primary hover:underline">Abrir kanban</RouterLink>
           </div>
           <ul class="mt-4 flex flex-col gap-3">
-            <li v-for="s in data.by_status" :key="s.status" class="text-sm">
+            <li v-for="s in data.by_stage" :key="s.stage" class="text-sm">
               <div class="flex justify-between">
                 <span>{{ s.label }}</span>
                 <span class="font-semibold tabular-nums">{{ s.total }}</span>
@@ -102,10 +102,10 @@ const maxStatus = computed(() => Math.max(1, ...(data.value?.by_status ?? []).ma
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium">{{ r.client ?? '—' }}</p>
                   <p class="text-xs text-muted">
-                    <span class="font-mono">{{ r.code }}</span> · {{ formatDateTime(r.status_changed_at) }}
+                    <span class="font-mono">{{ r.code }}</span> · {{ formatDateTime(r.stage_changed_at) }}
                   </p>
                 </div>
-                <StatusBadge :tone="statusTone(r.status)">{{ r.status_label }}</StatusBadge>
+                <StatusBadge :tone="stageTone(r.stage, r.status)">{{ r.status === 'ACTIVE' ? r.stage_label : r.status_label }}</StatusBadge>
               </RouterLink>
             </li>
           </ul>

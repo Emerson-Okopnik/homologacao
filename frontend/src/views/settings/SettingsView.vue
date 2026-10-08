@@ -6,21 +6,20 @@ import InlineAlert from '@/components/ui/InlineAlert.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api } from '@/lib/http'
-import type { Distributor, ProcessStatusMeta } from '@/types/api'
+import type { Distributor, StageCatalog } from '@/types/api'
 
 const { data, error, loading } = useApiQuery(
   () => 'settings',
   async () => {
-    const [statuses, documentTypes, distributors] = await Promise.all([
-      api<{ data: ProcessStatusMeta[] }>('/process-statuses'),
+    const [catalog, documentTypes, distributors] = await Promise.all([
+      api<{ data: StageCatalog }>('/process-stages'),
       api<{ data: Array<{ value: string; label: string }> }>('/document-types'),
       api<{ data: Distributor[] }>('/distributors'),
     ])
-    return { statuses: statuses.data, documentTypes: documentTypes.data, distributors: distributors.data }
+    return { stages: catalog.data.stages, documentTypes: documentTypes.data, distributors: distributors.data }
   },
 )
 
-const labelOf = computed(() => new Map((data.value?.statuses ?? []).map((s) => [s.value, s.label])))
 const integrated = computed(() => (data.value?.distributors ?? []).filter((d) => d.integration_mode !== 'manual').length)
 </script>
 
@@ -37,21 +36,14 @@ const integrated = computed(() => (data.value?.distributors ?? []).filter((d) =>
           <GitBranch class="size-5 text-primary" aria-hidden="true" />
           <h2 id="cfg-workflow" class="font-semibold">Etapas do processo</h2>
         </div>
-        <ol class="flex flex-col divide-y divide-line">
-          <li v-for="(status, index) in data.statuses" :key="status.value" class="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:gap-4">
-            <div class="flex min-w-56 items-center gap-3">
-              <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-canvas text-xs font-semibold text-muted">{{ index + 1 }}</span>
-              <span class="font-medium">{{ status.label }}</span>
-              <span v-if="status.terminal" class="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">Final</span>
-              <span v-else-if="status.on_board" class="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">Kanban</span>
-            </div>
-            <div class="flex flex-wrap items-center gap-1.5 text-xs">
-              <template v-if="status.transitions.length">
-                <ArrowRight class="size-3.5 text-muted" aria-label="Pode seguir para" />
-                <span v-for="t in status.transitions" :key="t" class="rounded-full border border-line px-2 py-0.5">{{ labelOf.get(t) ?? t }}</span>
-              </template>
-              <span v-else class="text-muted">Sem transições</span>
-            </div>
+        <p class="mb-3 text-sm text-muted">
+          As etapas são derivadas dos fatos do processo (parecer, vistoria, obra na rede, conexão). Não há transição manual de status.
+        </p>
+        <ol class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <li v-for="(stage, index) in data.stages" :key="stage.value" class="flex items-center gap-2">
+            <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-canvas text-xs font-semibold text-muted">{{ index + 1 }}</span>
+            <span class="text-sm font-medium">{{ stage.label }}</span>
+            <ArrowRight v-if="index < data.stages.length - 1" class="hidden size-3.5 text-muted sm:block" aria-hidden="true" />
           </li>
         </ol>
       </section>

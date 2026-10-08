@@ -16,7 +16,7 @@ import { useApiQuery } from '@/composables/useApiQuery'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import { formatNumber } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
-import type { Client, ConsumerUnit, Distributor, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
+import type { Client, CompensationMode, ConsumerUnit, Distributor, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
 
 const MICRO_LIMIT_KW = 75
 const TYPE_LABEL: Record<Equipment['type'], string> = { module: 'Módulo', inverter: 'Inversor', battery: 'Bateria' }
@@ -53,11 +53,14 @@ const equipmentById = computed(() => new Map(allEquipment.value.map((e) => [e.id
 const form = reactive({
   client_id: typeof route.query.client === 'string' ? route.query.client : '',
   consumer_unit_id: '',
-  technical_responsible_id: '',
-  modality: 'autoconsumo_local',
-  installed_power_kwp: '',
-  inverter_power_kw: '',
+  project_rt_id: '',
+  project_art: '',
+  execution_rt_id: '',
+  execution_art: '',
+  compensation_mode: 'LOCAL_SELF_CONSUMPTION' as CompensationMode,
+  initial_protocol: '',
   has_battery: false,
+  storage_energy_kwh: '',
   estimated_generation_kwh_month: '',
   notes: '',
 })
@@ -68,7 +71,7 @@ const error = ref<ApiError | null>(null)
 
 const clientDialog = ref(false)
 const unitDialog = ref(false)
-const responsibleDialog = ref(false)
+const responsibleDialog = ref<'project' | 'execution' | null>(null)
 const equipmentDialog = shallowRef<{ type: Equipment['type']; rowIndex: number | null } | null>(null)
 const distributors = shallowRef<Distributor[] | null>(null)
 const notice = ref('')
@@ -80,14 +83,19 @@ watch(
     if (project.client && !lookups.value?.clients.some((c) => c.id === project.client!.id)) {
       createdClients.value.push(project.client as Client)
     }
+    const projectRt = project.responsibilities?.find((r) => r.purpose === 'PROJECT')
+    const executionRt = project.responsibilities?.find((r) => r.purpose === 'EXECUTION')
     Object.assign(form, {
       client_id: project.client?.id ?? '',
       consumer_unit_id: project.consumer_unit?.id ?? '',
-      technical_responsible_id: project.technical_responsible?.id ?? '',
-      modality: project.modality,
-      installed_power_kwp: String(project.installed_power_kwp),
-      inverter_power_kw: String(project.inverter_power_kw),
+      project_rt_id: projectRt?.responsible.id ?? '',
+      project_art: projectRt?.art_number ?? '',
+      execution_rt_id: executionRt?.responsible.id ?? '',
+      execution_art: executionRt?.art_number ?? '',
+      compensation_mode: project.compensation_mode,
+      initial_protocol: project.initial_protocol ?? '',
       has_battery: project.has_battery,
+      storage_energy_kwh: project.storage_energy_kwh?.toString() ?? '',
       estimated_generation_kwh_month: project.estimated_generation_kwh_month?.toString() ?? '',
       notes: project.notes ?? '',
     })
@@ -128,14 +136,6 @@ const equipmentOptions = computed(() =>
 )
 
 const numeric = (v: string) => (v.trim() === '' ? null : Number(v.replace(',', '.')))
-const accessPower = computed(() => {
-  const kwp = numeric(form.installed_power_kwp)
-  const kw = numeric(form.inverter_power_kw)
-  if (!kwp || !kw) return null
-  return Math.min(kwp, kw)
-})
-const generationType = computed(() => (accessPower.value === null ? null : accessPower.value <= MICRO_LIMIT_KW ? 'Microgeração' : 'Minigeração'))
-
 function totalKw(type: Equipment['type']) {
   const total = items.value.reduce((sum, item) => {
     const eq = equipmentById.value.get(item.id)
@@ -147,12 +147,14 @@ const moduleTotalKwp = computed(() => totalKw('module'))
 const inverterTotalKw = computed(() => totalKw('inverter'))
 const hasBatteryItem = computed(() => items.value.some((i) => equipmentById.value.get(i.id)?.type === 'battery'))
 
-watch(moduleTotalKwp, (total, old) => {
-  if (total && (form.installed_power_kwp === '' || numeric(form.installed_power_kwp) === old)) form.installed_power_kwp = String(total)
+const accessPower = computed(() => {
+  if (!moduleTotalKwp.value || !inverterTotalKw.value) return null
+  return Math.min(moduleTotalKwp.value, inverterTotalKw.value)
 })
-watch(inverterTotalKw, (total, old) => {
-  if (total && (form.inverter_power_kw === '' || numeric(form.inverter_power_kw) === old)) form.inverter_power_kw = String(total)
-})
+const generationType = computed(() =>
+  accessPower.value === null ? null : accessPower.value <= MICRO_LIMIT_KW ? 'Microgeração (prévia)' : 'Minigeração (prévia)',
+)
+
 watch(hasBatteryItem, (has) => {
   if (has) form.has_battery = true
 })
@@ -190,8 +192,10 @@ function onUnitSaved(unit: ConsumerUnit) {
 
 function onResponsibleSaved(rt: TechnicalResponsible) {
   createdResponsibles.value.unshift(rt)
-  responsibleDialog.value = false
-  form.technical_responsible_id = rt.id
+  const target = responsibleDialog.value
+  responsibleDialog.value = null
+  if (target === 'execution') form.execution_rt_id = rt.id
+  else form.project_rt_id = rt.id
 }
 
 function onEquipmentSaved(eq: Equipment) {
@@ -210,11 +214,16 @@ async function submit() {
   submitting.value = true
   error.value = null
   const body = {
-    ...form,
-    technical_responsible_id: form.technical_responsible_id || null,
-    installed_power_kwp: numeric(form.installed_power_kwp),
-    inverter_power_kw: numeric(form.inverter_power_kw),
+    client_id: form.client_id,
+    consumer_unit_id: form.consumer_unit_id,
+    compensation_mode: form.compensation_mode,
+    initial_protocol: form.initial_protocol || null,
+    has_battery: form.has_battery,
+    storage_energy_kwh: form.has_battery ? numeric(form.storage_energy_kwh) : null,
     estimated_generation_kwh_month: numeric(form.estimated_generation_kwh_month),
+    notes: form.notes || null,
+    project_rt: form.project_rt_id ? { id: form.project_rt_id, art_number: form.project_art || null } : null,
+    execution_rt: form.execution_rt_id ? { id: form.execution_rt_id, art_number: form.execution_art || null } : null,
     equipment: items.value.filter((i) => i.id).map((i) => ({ id: i.id, quantity: Number(i.quantity) })),
   }
   try {
@@ -299,25 +308,39 @@ async function submit() {
           </div>
         </div>
 
-        <div class="flex flex-col gap-1.5">
-          <SelectField
-            v-model="form.technical_responsible_id"
-            label="Responsável técnico"
-            placeholder="Definir depois"
-            :options="responsibleOptions"
-            hint="Obrigatório antes do envio à distribuidora."
-            :error="error?.firstError('technical_responsible_id')"
-          />
-          <button
-            v-if="auth.can('technical_responsibles.manage')"
-            type="button"
-            class="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary hover:underline"
-            @click="responsibleDialog = true"
-          >
-            <UserPlus class="size-4" aria-hidden="true" />
-            Cadastrar responsável técnico
-          </button>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <SelectField
+              v-model="form.project_rt_id"
+              label="RT do projeto"
+              placeholder="Definir depois"
+              :options="responsibleOptions"
+              hint="Obrigatório antes do protocolo."
+              :error="error?.firstError('project_rt.id')"
+            />
+            <FormField v-if="form.project_rt_id" v-model="form.project_art" label="Nº ART/TRT de projeto" :error="error?.firstError('project_rt.art_number')" />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <SelectField
+              v-model="form.execution_rt_id"
+              label="RT da execução"
+              placeholder="Definir depois"
+              :options="responsibleOptions"
+              hint="Pode ser informado após a aprovação."
+              :error="error?.firstError('execution_rt.id')"
+            />
+            <FormField v-if="form.execution_rt_id" v-model="form.execution_art" label="Nº ART/TRT de execução" :error="error?.firstError('execution_rt.art_number')" />
+          </div>
         </div>
+        <button
+          v-if="auth.can('technical_responsibles.manage')"
+          type="button"
+          class="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary hover:underline"
+          @click="responsibleDialog = form.project_rt_id && !form.execution_rt_id ? 'execution' : 'project'"
+        >
+          <UserPlus class="size-4" aria-hidden="true" />
+          Cadastrar responsável técnico
+        </button>
       </section>
 
       <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-eq">
@@ -420,32 +443,20 @@ async function submit() {
             {{ generationType }} · potência de acesso {{ formatNumber(accessPower, 'kW') }}
           </p>
         </div>
-        <p class="text-sm text-muted">As potências são preenchidas automaticamente pela soma dos equipamentos. Você pode ajustar se precisar.</p>
-        <SelectField
-          v-model="form.modality"
-          label="Modalidade de compensação"
-          :options="[
-            { value: 'autoconsumo_local', label: 'Autoconsumo local' },
-            { value: 'autoconsumo_remoto', label: 'Autoconsumo remoto' },
-            { value: 'geracao_compartilhada', label: 'Geração compartilhada' },
-            { value: 'multiplas_uc', label: 'Múltiplas unidades consumidoras' },
-          ]"
-          :error="error?.firstError('modality')"
-        />
-        <div class="grid gap-4 sm:grid-cols-3">
-          <FormField
-            v-model="form.installed_power_kwp"
-            label="Potência dos módulos (kWp)"
-            type="number"
-            required
-            :error="error?.firstError('installed_power_kwp')"
-          />
-          <FormField
-            v-model="form.inverter_power_kw"
-            label="Potência dos inversores (kW)"
-            type="number"
-            required
-            :error="error?.firstError('inverter_power_kw')"
+        <p class="text-sm text-muted">
+          As potências vêm da soma dos equipamentos. A classificação e a elegibilidade ao fast track são decididas pelas regras vigentes ao salvar.
+        </p>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <SelectField
+            v-model="form.compensation_mode"
+            label="Modalidade de compensação"
+            :options="[
+              { value: 'LOCAL_SELF_CONSUMPTION', label: 'Autoconsumo local' },
+              { value: 'REMOTE_SELF_CONSUMPTION', label: 'Autoconsumo remoto' },
+              { value: 'SHARED_GENERATION', label: 'Geração compartilhada' },
+              { value: 'MULTIPLE_UNITS', label: 'Múltiplas unidades consumidoras' },
+            ]"
+            :error="error?.firstError('compensation_mode')"
           />
           <FormField
             v-model="form.estimated_generation_kwh_month"
@@ -454,10 +465,26 @@ async function submit() {
             :error="error?.firstError('estimated_generation_kwh_month')"
           />
         </div>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="form.has_battery" type="checkbox" class="size-4 accent-primary" />
-          Sistema com armazenamento (bateria)
-        </label>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex items-center gap-2 self-center text-sm">
+            <input v-model="form.has_battery" type="checkbox" class="size-4 accent-primary" />
+            Sistema com armazenamento (bateria)
+          </label>
+          <FormField
+            v-if="form.has_battery"
+            v-model="form.storage_energy_kwh"
+            label="Energia armazenável (kWh)"
+            type="number"
+            required
+            :error="error?.firstError('storage_energy_kwh')"
+          />
+        </div>
+        <FormField
+          v-model="form.initial_protocol"
+          label="Protocolo inicial (opcional)"
+          hint="Se a solicitação já foi aberta no portal da distribuidora."
+          :error="error?.firstError('initial_protocol')"
+        />
         <TextareaField v-model="form.notes" label="Observações técnicas" :rows="3" :error="error?.firstError('notes')" />
       </section>
 
@@ -478,7 +505,7 @@ async function submit() {
       @close="unitDialog = false"
       @saved="onUnitSaved"
     />
-    <ResponsibleDialog v-if="responsibleDialog" :item="null" @close="responsibleDialog = false" @saved="onResponsibleSaved" />
+    <ResponsibleDialog v-if="responsibleDialog" :item="null" @close="responsibleDialog = null" @saved="onResponsibleSaved" />
     <EquipmentDialog
       v-if="equipmentDialog"
       :item="null"
