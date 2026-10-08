@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   ScrollText,
   Settings,
+  ShieldCheck,
   SquareKanban,
   Users,
   UsersRound,
@@ -18,6 +19,8 @@ export interface NavItem {
   icon: Component
   permission: PermissionKey
   to?: string
+  /** Visível apenas para o super administrador da plataforma (ignora `permission`). */
+  superAdmin?: boolean
 }
 
 export interface NavSection {
@@ -49,5 +52,9 @@ export const navigation: NavSection[] = [
       { label: 'Auditoria', icon: ScrollText, permission: 'audit.view', to: '/auditoria' },
       { label: 'Configurações', icon: Settings, permission: 'workflow.configure', to: '/configuracoes' },
     ],
+  },
+  {
+    title: 'Plataforma',
+    items: [{ label: 'Super Admin', icon: ShieldCheck, permission: 'roles.view', to: '/super-admin', superAdmin: true }],
   },
 ]

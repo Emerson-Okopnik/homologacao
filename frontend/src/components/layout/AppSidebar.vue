@@ -12,7 +12,9 @@ const auth = useAuthStore()
 
 const sections = computed(() =>
   navigation
-    .map((section) => ({ ...section, items: section.items.filter((item) => auth.can(item.permission) || item.to === '/') }))
+    .map((section) => ({ ...section, items: section.items.filter((item) =>
+        item.superAdmin ? auth.isSuperAdmin : auth.can(item.permission) || item.to === '/',
+      ) }))
     .filter((section) => section.items.length > 0),
 )
 </script>

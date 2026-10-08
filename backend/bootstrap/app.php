@@ -2,6 +2,7 @@
 
 use App\Http\Exceptions\ApiExceptionRenderer;
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\ResolveTenant;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(SecurityHeaders::class);
         $middleware->alias([
             'tenant' => ResolveTenant::class,
+            'super_admin' => EnsureSuperAdmin::class,
         ]);
         // O tenant precisa estar resolvido antes do route model binding; caso contrário o
         // TenantScope (fail-closed) faria todo binding retornar 404.

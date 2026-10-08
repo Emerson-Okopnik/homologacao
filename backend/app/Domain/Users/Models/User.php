@@ -65,6 +65,7 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'active' => 'boolean',
+            'is_super_admin' => 'boolean',
             'last_login_at' => 'datetime',
             'email_verified_at' => 'datetime',
         ];
@@ -97,6 +98,11 @@ class User extends Authenticatable
         $key = $permission instanceof PermissionKey ? $permission->value : $permission;
 
         return $this->permissionKeys()->contains($key);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return (bool) $this->getAttribute('is_super_admin');
     }
 
     public function flushPermissionCache(): void

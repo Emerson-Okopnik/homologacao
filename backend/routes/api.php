@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\TenantController;
+use App\Http\Controllers\Api\Admin\TenantRoleController;
+use App\Http\Controllers\Api\Admin\TenantUserController;
 use App\Http\Controllers\Api\Audit\AuditLogController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Auth\PasswordResetController;
@@ -27,6 +30,27 @@ Route::prefix('auth')->group(function (): void {
         Route::get('me', [AuthController::class, 'me']);
     });
 });
+
+// Super admin: tenants e RBAC de toda a plataforma.
+Route::middleware(['auth:sanctum', 'tenant', 'super_admin', 'throttle:120,1'])
+    ->prefix('admin')
+    ->group(function (): void {
+        Route::get('permissions', [TenantRoleController::class, 'permissions']);
+
+        Route::get('tenants', [TenantController::class, 'index']);
+        Route::post('tenants', [TenantController::class, 'store']);
+        Route::get('tenants/{tenant:uuid}', [TenantController::class, 'show']);
+        Route::patch('tenants/{tenant:uuid}', [TenantController::class, 'update']);
+
+        Route::get('tenants/{tenant:uuid}/roles', [TenantRoleController::class, 'index']);
+        Route::post('tenants/{tenant:uuid}/roles', [TenantRoleController::class, 'store']);
+        Route::patch('tenants/{tenant:uuid}/roles/{role}', [TenantRoleController::class, 'update']);
+        Route::delete('tenants/{tenant:uuid}/roles/{role}', [TenantRoleController::class, 'destroy']);
+
+        Route::get('tenants/{tenant:uuid}/users', [TenantUserController::class, 'index']);
+        Route::post('tenants/{tenant:uuid}/users', [TenantUserController::class, 'store']);
+        Route::patch('tenants/{tenant:uuid}/users/{user}', [TenantUserController::class, 'update']);
+    });
 
 Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::apiResource('users', UserController::class)->except(['destroy']);

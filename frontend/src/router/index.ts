@@ -8,6 +8,7 @@ declare module 'vue-router' {
     public?: boolean
     guestOnly?: boolean
     permission?: PermissionKey
+    superAdmin?: boolean
     title?: string
   }
 }
@@ -124,6 +125,12 @@ export const router = createRouter({
           meta: { permission: 'workflow.configure', title: 'Configurações' },
         },
         {
+          path: 'super-admin',
+          name: 'super-admin',
+          component: () => import('@/views/admin/SuperAdminView.vue'),
+          meta: { superAdmin: true, title: 'Super Admin' },
+        },
+        {
           path: 'acesso-negado',
           name: 'forbidden',
           component: () => import('@/views/ForbiddenView.vue'),
@@ -150,6 +157,10 @@ router.beforeEach(async (to) => {
 
   if (auth.status !== 'authenticated') {
     return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} }
+  }
+
+  if (to.meta.superAdmin && !auth.isSuperAdmin) {
+    return { name: 'forbidden' }
   }
 
   if (to.meta.permission && !auth.can(to.meta.permission)) {

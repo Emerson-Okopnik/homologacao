@@ -59,4 +59,25 @@ enum PermissionKey: string
     {
         return explode('.', $this->value)[0];
     }
+
+    public static function groupLabel(string $group): string
+    {
+        return match ($group) {
+            'users' => 'Usuários',
+            'roles' => 'Perfis',
+            'audit' => 'Auditoria',
+            'clients' => 'Clientes',
+            'technical_responsibles' => 'Responsáveis técnicos',
+            'projects' => 'Projetos',
+            'documents' => 'Documentos',
+            'homologations' => 'Homologações',
+            'process' => 'Processos',
+            'protocol' => 'Protocolos',
+            'workflow' => 'Workflow',
+            'requirements' => 'Requisitos',
+            'integrations' => 'Integrações',
+            'dashboard' => 'Dashboard',
+            default => ucfirst($group),
+        };
+    }
 }

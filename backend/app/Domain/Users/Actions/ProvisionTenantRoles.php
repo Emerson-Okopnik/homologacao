@@ -39,6 +39,12 @@ final class ProvisionTenantRoles
                     ['name' => $systemRole->label(), 'is_system' => true],
                 );
 
+                // Perfis já existentes podem ter sido ajustados pelo super admin; só o
+                // Administrador é sempre ressincronizado (mantém acesso total a novas permissões).
+                if (! $role->wasRecentlyCreated && $systemRole !== SystemRole::Administrator) {
+                    continue;
+                }
+
                 $role->permissions()->sync(
                     collect($systemRole->defaultPermissions())
                         ->map(fn (PermissionKey $p) => $permissionIds[$p->value])

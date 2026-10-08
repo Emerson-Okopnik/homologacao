@@ -44,6 +44,10 @@ class DatabaseSeeder extends Seeder
                     Role::query()->where('slug', $role->value)->pluck('id'),
                 );
             }
+
+            // Operador da plataforma (demonstração): acessa a tela de Super Admin.
+            User::query()->where('email', 'admin@homologa.local')->first()
+                ?->forceFill(['is_super_admin' => true])->save();
         });
     }
 }

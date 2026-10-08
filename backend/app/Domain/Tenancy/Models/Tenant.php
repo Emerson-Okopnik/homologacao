@@ -2,6 +2,7 @@
 
 namespace App\Domain\Tenancy\Models;
 
+use App\Domain\Users\Models\Role;
 use App\Domain\Users\Models\User;
 use Database\Factories\TenantFactory;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -46,5 +47,13 @@ class Tenant extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
+    }
+
+    /**
+     * @return HasMany<Role, $this>
+     */
+    public function roles(): HasMany
+    {
+        return $this->hasMany(Role::class);
     }
 }

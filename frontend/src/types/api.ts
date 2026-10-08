@@ -36,12 +36,32 @@ export interface User {
   last_login_at: string | null
   created_at: string | null
   roles?: Role[]
+  is_super_admin?: boolean
 }
 
 export interface Me {
   user: User
   tenant: { id: string; name: string; slug: string } | null
   permissions: PermissionKey[]
+  is_super_admin?: boolean
+}
+
+export interface Tenant {
+  id: string
+  name: string
+  slug: string
+  active: boolean
+  users_count?: number
+  roles_count?: number
+  is_current: boolean
+  created_at: string | null
+}
+
+export interface PermissionDefinition {
+  key: PermissionKey
+  label: string
+  group: string
+  group_label: string
 }
 
 export interface AuditLog {

@@ -25,6 +25,7 @@ final class MeResource extends JsonResource
             'user' => (new UserResource($this->resource->loadMissing('roles')))->toArray($request),
             'tenant' => $tenant ? ['id' => $tenant->uuid, 'name' => $tenant->name, 'slug' => $tenant->slug] : null,
             'permissions' => $this->permissionKeys()->all(),
+            'is_super_admin' => $this->isSuperAdmin(),
         ];
     }
 }
