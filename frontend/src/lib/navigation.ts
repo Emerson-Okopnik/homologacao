@@ -9,6 +9,7 @@ import {
   SquareKanban,
   Users,
   UsersRound,
+  Wrench,
 } from '@lucide/vue'
 import type { PermissionKey } from '@/types/api'
 
@@ -30,12 +31,16 @@ export const navigation: NavSection[] = [
     title: 'Operação',
     items: [
       { label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view', to: '/' },
-      { label: 'Clientes', icon: UsersRound, permission: 'clients.view' },
-      { label: 'Projetos', icon: FolderKanban, permission: 'projects.view' },
-      { label: 'Kanban', icon: SquareKanban, permission: 'homologations.view' },
-      { label: 'Homologações', icon: ClipboardCheck, permission: 'homologations.view' },
-      { label: 'Documentos', icon: FileText, permission: 'documents.view' },
+      { label: 'Kanban', icon: SquareKanban, permission: 'homologations.view', to: '/kanban' },
+      { label: 'Homologações', icon: ClipboardCheck, permission: 'homologations.view', to: '/processos' },
+      { label: 'Projetos', icon: FolderKanban, permission: 'projects.view', to: '/projetos' },
+      { label: 'Clientes', icon: UsersRound, permission: 'clients.view', to: '/clientes' },
+      { label: 'Documentos', icon: FileText, permission: 'documents.view', to: '/documentos' },
     ],
+  },
+  {
+    title: 'Cadastros',
+    items: [{ label: 'Cadastros técnicos', icon: Wrench, permission: 'projects.view', to: '/cadastros' }],
   },
   {
     title: 'Administração',

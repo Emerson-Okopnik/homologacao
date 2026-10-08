@@ -91,6 +91,31 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return payload as T
 }
 
+export async function upload<T>(path: string, form: FormData): Promise<T> {
+  await ensureCsrfCookie()
+  const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+  const token = readCookie('XSRF-TOKEN')
+  if (token) headers['X-XSRF-TOKEN'] = token
+
+  const response = await fetch(buildUrl(path), { method: 'POST', headers, credentials: 'include', body: form })
+  const payload = (await response.json().catch(() => ({}))) as { message?: string; errors?: Record<string, string[]> }
+
+  if (!response.ok) {
+    if (response.status === 401 && unauthorizedHandler) unauthorizedHandler()
+    throw new ApiError(
+      response.status,
+      payload.message ?? messageForStatus(response.status),
+      payload.errors ?? {},
+      response.headers.get('X-Correlation-Id'),
+    )
+  }
+  return payload as T
+}
+
+export function toApiError(e: unknown): ApiError {
+  return e instanceof ApiError ? e : new ApiError(0, 'Falha de conexão com o servidor.')
+}
+
 function messageForStatus(status: number): string {
   if (status === 403) return 'Você não tem permissão para esta ação.'
   if (status === 404) return 'Registro não encontrado.'
