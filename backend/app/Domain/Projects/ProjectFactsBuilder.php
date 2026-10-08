@@ -60,7 +60,7 @@ final class ProjectFactsBuilder
             'execution_rt_defined' => $executionRt !== null,
         ];
 
-        $network = $process?->network_work_status ?? NetworkWorkStatus::UnderAnalysis;
+        $network = $process->network_work_status ?? NetworkWorkStatus::UnderAnalysis;
         $lastInspection = $process?->inspections()->first();
         $events = $process ? $process->connectionEvents()->pluck('type') : collect();
 
@@ -80,13 +80,13 @@ final class ProjectFactsBuilder
     public function modulesPowerKwp(SolarProject $project): float
     {
         return round($project->equipment->where('type', 'module')
-            ->sum(fn ($e) => (float) $e->power_w * (int) $e->pivot->quantity) / 1000, 3);
+            ->sum(fn ($e) => (float) $e->power_w * (int) $e->pivot->getAttribute('quantity')) / 1000, 3);
     }
 
     public function invertersPowerKw(SolarProject $project): float
     {
         return round($project->equipment->where('type', 'inverter')
-            ->sum(fn ($e) => (float) ($e->nominal_ac_power_kw ?? ((float) $e->power_w / 1000)) * (int) $e->pivot->quantity), 3);
+            ->sum(fn ($e) => (float) ($e->nominal_ac_power_kw ?? ((float) $e->power_w / 1000)) * (int) $e->pivot->getAttribute('quantity')), 3);
     }
 
     /** Potência considerada: o menor valor entre módulos (CC) e inversores (CA), quando ambos existem. */

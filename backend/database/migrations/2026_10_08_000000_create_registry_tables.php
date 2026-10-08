@@ -100,9 +100,8 @@ return new class extends Migration
             $table->foreignId('tenant_id')->constrained()->restrictOnDelete();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('name');
-            $table->string('council', 10); // CREA | CFT | CAU
+            $table->string('council', 10); // CREA | CFT
             $table->string('registration', 40);
-            $table->string('cpf', 11)->nullable();
             $table->string('state', 2);
             $table->string('email')->nullable();
             $table->string('phone', 30)->nullable();
@@ -125,9 +124,6 @@ return new class extends Migration
             $table->decimal('energy_kwh', 10, 2)->nullable();
             $table->decimal('efficiency', 5, 2)->nullable();
             $table->string('certification')->nullable();
-            $table->decimal('nominal_ac_power_kw', 10, 3)->nullable();
-            $table->boolean('has_inmetro_registration')->default(false);
-            $table->string('inmetro_registration_number', 60)->nullable();
             $table->jsonb('specs')->nullable();
             $table->boolean('active')->default(true);
             $table->timestamps();

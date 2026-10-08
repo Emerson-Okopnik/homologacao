@@ -2,6 +2,7 @@
 
 namespace App\Domain\Homologations;
 
+use App\Domain\Documents\DocumentTypes;
 use App\Domain\Homologations\Models\ChecklistItem;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\Requirement;
@@ -16,7 +17,7 @@ final class ValidationService
     public function checklist(HomologationProcess $process): Collection
     {
         app(WorkflowDefinition::class)->provision();
-        $documents = app(ProjectVersionService::class)->documents($process->project, $process)->keyBy('document_type');
+        $documents = app(ProjectVersionService::class)->documents($process->project, $process)->keyBy(fn ($document) => DocumentTypes::legacy($document->document_type));
         foreach (Requirement::query()->get() as $requirement) {
             $applicable = $requirement->appliesTo($process->project) && (! $requirement->distributor_id || $requirement->distributor_id === $process->distributor_id);
             $item = ChecklistItem::firstOrCreate(['homologation_process_id' => $process->id, 'requirement_id' => $requirement->id]);

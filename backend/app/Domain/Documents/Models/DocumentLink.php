@@ -32,6 +32,7 @@ class DocumentLink extends Model
         return $this->belongsTo(Document::class);
     }
 
+    /** @return MorphTo<Model, $this> */
     public function linkable(): MorphTo
     {
         return $this->morphTo();

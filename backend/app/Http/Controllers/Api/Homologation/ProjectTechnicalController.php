@@ -51,19 +51,20 @@ final class ProjectTechnicalController extends Controller
         $data = $request->validate(['type' => ['required', Rule::in(['ART', 'TRT'])], 'number' => ['required', 'string', 'max:80'],
             'issued_at' => ['required', 'date', 'before_or_equal:today'], 'valid_until' => ['nullable', 'date', 'after_or_equal:issued_at'],
             'technical_responsible_id' => ['required', 'uuid'], 'file_id' => ['required', 'uuid']]);
-        DB::transaction(function () use ($project, $data) {
+        DB::transaction(function () use ($project, $data, $request) {
             $project = SolarProject::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
             $project->assertEditable();
             $rt = TechnicalResponsible::query()->where('uuid', $data['technical_responsible_id'])->firstOrFail();
             if ($rt->id !== $project->technical_responsible_id || ($data['type'] === 'ART' ? 'CREA' : 'CFT') !== $rt->council) {
                 throw new DomainException('O termo deve corresponder ao responsável técnico e ao conselho do projeto.', 'term_responsible_mismatch');
             }
-            $file = ProcessDocument::query()->where('uuid', $data['file_id'])->where('solar_project_id', $project->id)->where('document_type', 'art_trt')->firstOrFail();
+            $file = ProcessDocument::query()->where('uuid', $data['file_id'])->where('solar_project_id', $project->id)->whereIn('document_type', ['art_trt', 'PROJECT_ART'])->firstOrFail();
             $existing = ResponsibilityTerm::where('type', $data['type'])->where('number', $data['number'])->first();
             if ($existing && $existing->solar_project_id !== $project->id) {
                 throw new DomainException('Este termo já está vinculado a outro projeto.', 'term_duplicated', 409);
             }
             ResponsibilityTerm::updateOrCreate(['solar_project_id' => $project->id, 'type' => $data['type'], 'number' => $data['number']], [...$data, 'technical_responsible_id' => $rt->id, 'file_id' => $file->id]);
+            $project->responsibilities()->updateOrCreate(['purpose' => 'PROJECT'], ['technical_responsible_id' => $rt->id, 'art_number' => $data['number'], 'created_by' => $request->user()->id]);
             $project->touch();
         });
 

@@ -59,12 +59,13 @@ describe('cadastro de equipamentos', () => {
 })
 
 describe('cadastro de projetos', () => {
-  it('envia as potências digitadas e abre o processo criado', async () => {
+  it('calcula as potências do catálogo, envia as quantidades e abre o processo criado', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       const path = String(url).split('?')[0]
       if (path === '/api/clients') return response([{ id: 'client-1', name: 'Cliente teste', document: null }])
       if (path === '/api/consumer-units') return response([{ id: 'unit-1', number: '123', distributor: { name: 'Distribuidora teste' }, address: { city: 'São Paulo', state: 'SP' } }])
-      if (path === '/api/equipment' || path === '/api/technical-responsibles') return response([])
+      if (path === '/api/equipment') return response([{ id: 'module-1', type: 'module', manufacturer: 'Teste', model: 'M550', power_w: 550.5 }, { id: 'inverter-1', type: 'inverter', manufacturer: 'Teste', model: 'I5', power_w: 5250 }])
+      if (path === '/api/technical-responsibles') return response([])
       if (path === '/api/projects' && init?.method === 'POST') return response({ id: 'project-1', process: { id: 'process-1' } }, 201)
       throw new Error(`Requisição inesperada: ${url}`)
     })
@@ -82,7 +83,14 @@ describe('cadastro de projetos', () => {
     const clientField = wrapper.findAllComponents(SelectField).find((candidate) => candidate.props('label') === 'Cliente')!
     await clientField.get('select').setValue('client-1')
     await flushPromises()
-    for (const [label, value] of [['Potência dos módulos (kWp)', '5.505'], ['Potência dos inversores (kW)', '5.25'], ['Geração estimada (kWh/mês)', '720.5']]) {
+    for (const id of ['module-1','inverter-1']) {
+      await wrapper.findAll('button').find(button => button.text().includes('Adicionar do catálogo'))!.trigger('click')
+      const selects = wrapper.findAllComponents(SelectField).filter(field => String(field.props('label')).startsWith('Equipamento '))
+      await selects.at(-1)!.get('select').setValue(id)
+    }
+    const quantity = wrapper.findAll('input[type="number"]').find(input => input.attributes('aria-labelledby') === 'qty-0')!
+    await quantity.setValue('10')
+    for (const [label, value] of [['Geração estimada (kWh/mês)', '720.5']]) {
       const component = wrapper.findAllComponents(FormField).find((candidate) => candidate.props('label') === label)!
       await component.get('input').setValue(value)
     }
@@ -94,8 +102,9 @@ describe('cadastro de projetos', () => {
     const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/projects' && init?.method === 'POST')
     expect(request).toBeDefined()
     expect(JSON.parse(String(request![1]?.body))).toMatchObject({
-      client_id: 'client-1', consumer_unit_id: 'unit-1', technical_responsible_id: null,
-      installed_power_kwp: 5.505, inverter_power_kw: 5.25, estimated_generation_kwh_month: 720.5,
+      client_id: 'client-1', consumer_unit_id: 'unit-1', project_rt: null,
+      equipment: [{ id: 'module-1', quantity: 10 }, { id: 'inverter-1', quantity: 1 }],
+      compensation_mode: 'LOCAL_SELF_CONSUMPTION', estimated_generation_kwh_month: 720.5,
     })
     expect(router.currentRoute.value.path).toBe('/processos/process-1')
     expect(wrapper.text()).toBe('Processo criado')

@@ -82,7 +82,7 @@ final class ProjectTechnicalData
                     if ($key === 'arrays' && ! empty($row['strings_quantity']) && ! empty($row['modules_per_string']) && (int) $row['strings_quantity'] * (int) $row['modules_per_string'] !== (int) $row['module_quantity']) {
                         throw new DomainException('Quantidade de módulos incompatível com strings e módulos por string.', 'array_quantity_mismatch');
                     }
-                    if ($key === 'inverters' && abs((float) $row['nominal_ac_kw'] - (float) $equipment->power_w / 1000) > 0.001) {
+                    if ($key === 'inverters' && abs((float) $row['nominal_ac_kw'] - (float) ($equipment->nominal_ac_power_kw ?? ((float) $equipment->power_w / 1000))) > 0.001) {
                         throw new DomainException('A potência nominal do inversor deve corresponder ao modelo do catálogo.', 'inverter_power_mismatch');
                     }
                     $rows[] = $row;
@@ -128,8 +128,15 @@ final class ProjectTechnicalData
             $project->inverter_power_kw = number_format($project->inverters->sum(fn ($inverter) => $inverter->totalAcPower()), 3, '.', '');
             $project->generation_type = SolarProject::classify($project->accessPowerKw());
             $project->has_battery = $project->storage->isNotEmpty();
+            $project->compensation_mode = array_search($project->modality, ProjectFormAdapter::MODES, true);
+            $project->compensation_method = strtoupper($project->compensation->allocation_rule);
+            $project->considered_power_kw = (string) $project->accessPowerKw();
+            $project->storage_energy_kwh = (string) $project->storage->sum(fn ($row) => (float) $row->energy_kwh * $row->quantity);
             $project->status = 'rascunho';
             $project->save();
+            if ($project->classification_decision_id !== null) {
+                app(ProjectEvaluator::class)->evaluate($project);
+            }
             $project->touch();
             $this->invalidateManualChecks($project);
         });
@@ -143,7 +150,7 @@ final class ProjectTechnicalData
                 SolarArray::firstOrCreate(['solar_project_id' => $project->id, 'module_model_id' => $equipment->id], ['module_quantity' => $quantity]);
             }
             if ($equipment->type === 'inverter') {
-                ProjectInverter::firstOrCreate(['solar_project_id' => $project->id, 'inverter_model_id' => $equipment->id], ['quantity' => $quantity, 'nominal_ac_kw' => (float) $equipment->power_w / 1000]);
+                ProjectInverter::firstOrCreate(['solar_project_id' => $project->id, 'inverter_model_id' => $equipment->id], ['quantity' => $quantity, 'nominal_ac_kw' => (float) ($equipment->nominal_ac_power_kw ?? ((float) $equipment->power_w / 1000))]);
             }
             if ($equipment->type === 'battery') {
                 ProjectStorage::firstOrCreate(['solar_project_id' => $project->id, 'battery_model_id' => $equipment->id], ['quantity' => $quantity, 'energy_kwh' => $equipment->energy_kwh]);

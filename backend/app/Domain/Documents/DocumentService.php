@@ -2,6 +2,7 @@
 
 namespace App\Domain\Documents;
 
+use App\Domain\Documents\Models\DocumentLink;
 use App\Domain\Documents\Models\ProcessDocument;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Projects\Models\SolarProject;
@@ -50,6 +51,7 @@ final class DocumentService
                     throw new DomainException('Este arquivo é idêntico à versão atual.', 'document_duplicated');
                 }
                 $path = $file->storeAs("tenants/{$project->tenant_id}/projects/{$project->uuid}", Str::uuid().'.'.$file->extension(), 'local');
+                DocumentLink::whereIn('document_id', (clone $query)->select('id'))->update(['is_current' => false]);
                 $query->update(['is_current' => false]);
 
                 return ProcessDocument::create(['solar_project_id' => $project->id, 'homologation_process_id' => $process?->id, 'document_type' => $metadata['document_type'],

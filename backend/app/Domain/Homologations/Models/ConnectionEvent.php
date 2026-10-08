@@ -7,15 +7,17 @@ use App\Domain\Homologations\Enums\ConnectionEventType;
 use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\Users\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 
 /**
+ * @property-read HomologationProcess $process
+ * @property int $homologation_process_id
  * @property int $id
  * @property string $uuid
  * @property ConnectionEventType $type
- * @property Carbon $occurred_at
+ * @property CarbonInterface $occurred_at
  * @property string|null $meter_number
  * @property string|null $notes
  */
@@ -36,5 +38,11 @@ class ConnectionEvent extends Model
     public function recorder(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    /** @return BelongsTo<HomologationProcess, $this> */
+    public function process(): BelongsTo
+    {
+        return $this->belongsTo(HomologationProcess::class, 'homologation_process_id');
     }
 }

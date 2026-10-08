@@ -6,6 +6,7 @@ use App\Domain\Rules\Models\DeadlineRule;
 use App\Domain\Rules\Models\FastTrackRule;
 use App\Domain\Rules\Models\GenerationClassificationRule;
 use App\Domain\Rules\Models\RequirementRule;
+use App\Domain\Rules\Models\VersionedRule;
 use App\Domain\Rules\RuleValidator;
 use Illuminate\Database\Seeder;
 
@@ -45,7 +46,7 @@ class RulesSeeder extends Seeder
     }
 
     /**
-     * @param  class-string<\App\Domain\Rules\Models\VersionedRule>  $model
+     * @param  class-string<VersionedRule>  $model
      * @param  array<string, mixed>  $attributes
      */
     private function upsert(string $model, array $attributes, RuleValidator $validator): void
@@ -68,6 +69,7 @@ class RulesSeeder extends Seeder
                 'effective_to' => null,
                 'active' => true,
                 ...$attributes,
+                'conditions' => $attributes['conditions'] ?? [],
                 'version' => 1,
             ],
         );

@@ -445,7 +445,7 @@ async function openProcess() {
             placeholder="Selecione"
             :options="
               data.documents
-                .filter((d) => d.is_current && d.document_type === 'art_trt')
+                .filter((d) => d.is_current && ['art_trt', 'PROJECT_ART'].includes(d.document_type))
                 .map((d) => ({ value: d.id, label: `${d.original_name} · v${d.version}` }))
             "
           /><BaseButton type="submit" :loading="saving">Vincular termo</BaseButton>

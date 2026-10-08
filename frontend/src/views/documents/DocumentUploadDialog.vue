@@ -5,7 +5,7 @@ import FormField from '@/components/ui/FormField.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api, upload, toApiError, type ApiError } from '@/lib/http'
-const props = defineProps<{ endpoint: string; initialType?: string; initialFile?: File }>()
+const props = defineProps<{ endpoint: string; initialType?: string; initialFile?: File; owner?: { type: string; id: string } }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const type = ref(props.initialType ?? 'outro')
 const issued = ref(''),
@@ -23,6 +23,10 @@ async function submit() {
   try {
     const form = new FormData()
     form.append('document_type', type.value)
+    if (props.owner) {
+      form.append('owner_type', props.owner.type)
+      form.append('owner_id', props.owner.id)
+    }
     if (file.value) form.append('file', file.value)
     if (issued.value) form.append('issued_at', issued.value)
     if (expires.value) form.append('expires_at', expires.value)

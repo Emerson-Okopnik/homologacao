@@ -86,7 +86,7 @@ const stageTones: Record<string, Tone> = {
 }
 
 export function stageTone(stage: string, status: string = 'ACTIVE'): Tone {
-  if (status === 'COMPLETED') return 'success'
-  if (status === 'CANCELLED') return 'danger'
+  if (status === 'COMPLETED' || status === 'conectado') return 'success'
+  if (status === 'CANCELLED' || status === 'cancelado') return 'danger'
   return stageTones[stage] ?? 'neutral'
 }

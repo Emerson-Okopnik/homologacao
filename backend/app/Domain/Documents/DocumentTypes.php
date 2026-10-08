@@ -12,6 +12,23 @@ final class DocumentTypes
      * @var array<string, array{label: string, owner: string}>
      */
     public const TYPES = [
+        'formulario_solicitacao' => ['label' => 'Formulário de solicitação de acesso', 'owner' => 'project'],
+        'art_trt' => ['label' => 'ART/TRT do responsável técnico', 'owner' => 'project'],
+        'diagrama_unifilar' => ['label' => 'Diagrama unifilar', 'owner' => 'project'],
+        'memorial_descritivo' => ['label' => 'Memorial descritivo', 'owner' => 'project'],
+        'datasheet_modulo' => ['label' => 'Datasheet dos módulos', 'owner' => 'project'],
+        'datasheet_inversor' => ['label' => 'Datasheet dos inversores', 'owner' => 'project'],
+        'certificado_inversor' => ['label' => 'Certificado INMETRO do inversor', 'owner' => 'project'],
+        'documento_titular' => ['label' => 'Documento de identificação do titular', 'owner' => 'project'],
+        'procuracao' => ['label' => 'Procuração', 'owner' => 'project'],
+        'lista_rateio' => ['label' => 'Lista de rateio de créditos', 'owner' => 'project'],
+        'datasheet_bateria' => ['label' => 'Datasheet do sistema de armazenamento', 'owner' => 'project'],
+        'estudo_protecao' => ['label' => 'Estudo de proteção / coordenação', 'owner' => 'project'],
+        'outro' => ['label' => 'Outro documento', 'owner' => 'project'],
+        'comprovante_envio' => ['label' => 'Comprovante de envio', 'owner' => 'project'],
+        'orcamento_conexao' => ['label' => 'Orçamento de conexão', 'owner' => 'project'],
+        'relatorio_vistoria' => ['label' => 'Relatório de vistoria', 'owner' => 'project'],
+        'evidencia_conexao' => ['label' => 'Evidência de conexão', 'owner' => 'project'],
         'ACCESS_REQUEST_FORM' => ['label' => 'Formulário de solicitação de acesso', 'owner' => 'project'],
         'PROJECT_ART' => ['label' => 'ART/TRT de projeto', 'owner' => 'project'],
         'EXECUTION_ART' => ['label' => 'ART/TRT de execução', 'owner' => 'execution'],
@@ -43,6 +60,15 @@ final class DocumentTypes
     public static function has(string $type): bool
     {
         return array_key_exists($type, self::TYPES);
+    }
+
+    public static function legacy(string $type): string
+    {
+        return ['ACCESS_REQUEST_FORM' => 'formulario_solicitacao', 'PROJECT_ART' => 'art_trt', 'SINGLE_LINE_DIAGRAM' => 'diagrama_unifilar',
+            'DESCRIPTIVE_MEMORIAL' => 'memorial_descritivo', 'HOLDER_ID' => 'documento_titular', 'POWER_OF_ATTORNEY' => 'procuracao',
+            'CREDIT_ALLOCATION_LIST' => 'lista_rateio', 'PROTECTION_STUDY' => 'estudo_protecao', 'STORAGE_DATASHEET' => 'datasheet_bateria',
+            'MODULE_DATASHEET' => 'datasheet_modulo', 'INVERTER_DATASHEET' => 'datasheet_inversor', 'INMETRO_CERTIFICATE' => 'certificado_inversor',
+            'INSPECTION_REPORT' => 'relatorio_vistoria', 'OTHER' => 'outro'][$type] ?? $type;
     }
 
     public static function label(string $type): string

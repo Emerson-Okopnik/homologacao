@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * @property string $type
  * @property string $manufacturer
  * @property string $model
+ * @property string|null $nominal_ac_power_kw
+ * @property bool $has_inmetro_registration
+ * @property string|null $inmetro_registration_number
  * @property string|null $power_w
  * @property string|null $energy_kwh
  * @property string|null $efficiency
@@ -32,13 +35,13 @@ class EquipmentItem extends Model
 
     protected $table = 'equipment_catalog';
 
-    protected $fillable = ['type', 'manufacturer', 'model', 'power_w', 'energy_kwh', 'efficiency', 'certification', 'specs', 'active'];
+    protected $fillable = ['type', 'manufacturer', 'model', 'power_w', 'energy_kwh', 'efficiency', 'certification', 'specs', 'active', 'nominal_ac_power_kw', 'has_inmetro_registration', 'inmetro_registration_number'];
 
     protected function casts(): array
     {
         return [
             'specs' => 'array',
-            'active' => 'boolean',
+            'active' => 'boolean', 'has_inmetro_registration' => 'boolean', 'nominal_ac_power_kw' => 'decimal:3',
             'power_w' => 'decimal:2',
             'energy_kwh' => 'decimal:2',
             'efficiency' => 'decimal:2',

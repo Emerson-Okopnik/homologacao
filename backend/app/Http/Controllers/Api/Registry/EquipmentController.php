@@ -72,6 +72,9 @@ final class EquipmentController extends Controller
             'energy_kwh' => ['nullable', 'numeric', 'min:0'],
             'efficiency' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'certification' => ['nullable', 'string', 'max:120'],
+            'nominal_ac_power_kw' => ['nullable', 'numeric', 'min:0', 'max:5000'],
+            'has_inmetro_registration' => ['sometimes', 'boolean'],
+            'inmetro_registration_number' => ['nullable', 'string', 'max:80'],
             'active' => ['sometimes', 'boolean'],
         ], ['model.unique' => 'Este equipamento já está no catálogo.']);
     }

@@ -105,7 +105,7 @@ const maxStatus = computed(() => Math.max(1, ...(data.value?.by_stage ?? []).map
                     <span class="font-mono">{{ r.code }}</span> · {{ formatDateTime(r.stage_changed_at) }}
                   </p>
                 </div>
-                <StatusBadge :tone="stageTone(r.stage, r.status)">{{ r.status === 'ACTIVE' ? r.stage_label : r.status_label }}</StatusBadge>
+                <StatusBadge :tone="stageTone(r.stage, r.status)">{{ !['conectado', 'cancelado'].includes(r.status) ? r.stage_label : r.status_label }}</StatusBadge>
               </RouterLink>
             </li>
           </ul>

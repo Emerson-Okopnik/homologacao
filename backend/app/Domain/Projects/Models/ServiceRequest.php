@@ -9,13 +9,14 @@ use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Protocolo inicial aberto na distribuidora (solicitação de serviço).
  *
  * @property int $id
  * @property string $protocol_number
- * @property \Illuminate\Support\Carbon|null $opened_at
+ * @property Carbon|null $opened_at
  */
 class ServiceRequest extends Model
 {

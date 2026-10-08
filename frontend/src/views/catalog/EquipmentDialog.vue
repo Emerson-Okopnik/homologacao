@@ -21,6 +21,9 @@ const form = reactive({
   efficiency: toText(props.item?.efficiency),
   certification: props.item?.certification ?? '',
   active: props.item?.active ?? true,
+  nominal_ac_power_kw: toText(props.item?.nominal_ac_power_kw),
+  has_inmetro_registration: props.item?.has_inmetro_registration ?? false,
+  inmetro_registration_number: props.item?.inmetro_registration_number ?? '',
 })
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
@@ -32,6 +35,8 @@ async function submit() {
     const body = {
       ...form,
       power_w: toNumber(form.power_w),
+      nominal_ac_power_kw: toNumber(form.nominal_ac_power_kw),
+      inmetro_registration_number: form.inmetro_registration_number || null,
       energy_kwh: toNumber(form.energy_kwh),
       efficiency: toNumber(form.efficiency),
       certification: form.certification || null,
@@ -81,6 +86,11 @@ async function submit() {
       hint="Ex.: número do registro Inmetro"
       :error="error?.firstError('certification')"
     />
+    <template v-if="form.type === 'inverter'">
+      <FormField v-model="form.nominal_ac_power_kw" type="number" label="Potência nominal CA (kW)" :error="error?.firstError('nominal_ac_power_kw')" />
+      <label class="flex items-center gap-2 text-sm"><input v-model="form.has_inmetro_registration" type="checkbox" class="size-4 accent-primary" />Possui registro Inmetro</label>
+      <FormField v-if="form.has_inmetro_registration" v-model="form.inmetro_registration_number" label="Número do registro Inmetro" :error="error?.firstError('inmetro_registration_number')" />
+    </template>
     <label v-if="item" class="flex items-center gap-2 text-sm">
       <input v-model="form.active" type="checkbox" class="size-4 accent-primary" />
       Ativo no catálogo

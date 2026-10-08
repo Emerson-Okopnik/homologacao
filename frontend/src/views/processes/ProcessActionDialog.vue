@@ -25,6 +25,10 @@ const eventType = ref(props.catalog?.connection_events[0]?.value ?? '')
 const occurredAt = ref(nowLocal)
 const meterNumber = ref('')
 const reason = ref('')
+const receipt = ref('')
+const externalReceipt = ref('')
+const report = ref('')
+const performedAt = ref(nowLocal)
 
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
@@ -73,7 +77,7 @@ const routes: Record<ProcessActionKey, string> = {
 function payload(): Record<string, unknown> {
   switch (props.action) {
     case 'submit':
-      return { protocol_number: protocol.value }
+      return { protocol_number: protocol.value, receipt_document_id: receipt.value, external_receipt: externalReceipt.value }
     case 'register_correction':
       return { items: items.value.split('\n').map((s) => s.trim()).filter(Boolean), notes: notes.value || null }
     case 'approve_access':
@@ -84,7 +88,7 @@ function payload(): Record<string, unknown> {
     case 'request_inspection':
       return { scheduled_for: scheduledFor.value || null }
     case 'record_inspection':
-      return { approved: inspectionApproved.value === 'true', notes: notes.value || null }
+      return { approved: inspectionApproved.value === 'true', notes: notes.value || null, report_document_id: report.value, performed_at: performedAt.value }
     case 'record_connection_event':
       return { type: eventType.value, occurred_at: occurredAt.value, meter_number: meterNumber.value || null, notes: notes.value || null }
     case 'cancel':
@@ -112,6 +116,7 @@ async function submit() {
 
 const networkOptions = computed(() => (props.catalog?.network_work ?? []).map((o) => ({ value: o.value, label: o.label })))
 const eventOptions = computed(() => (props.catalog?.connection_events ?? []).map((o) => ({ value: o.value, label: o.label })))
+const documentOptions = (types: string[]) => (props.process.checklist ?? []).flatMap(item => item.document?.review_status === 'aprovado' && types.includes(item.document.document_type) ? [{ value: item.document.id, label: item.document.original_name }] : [])
 </script>
 
 <template>
@@ -119,6 +124,10 @@ const eventOptions = computed(() => (props.catalog?.connection_events ?? []).map
     <p class="text-sm text-muted">{{ meta.description }}</p>
 
     <FormField v-if="action === 'submit'" v-model="protocol" label="Número do protocolo" required :error="error?.firstError('protocol_number')" />
+    <template v-if="action === 'submit'">
+      <SelectField v-model="receipt" label="Comprovante aprovado" required :options="documentOptions(['comprovante_envio'])" :error="error?.firstError('receipt_document_id')" />
+      <FormField v-model="externalReceipt" label="Identificação do comprovante no portal" required :error="error?.firstError('external_receipt')" />
+    </template>
 
     <template v-if="action === 'register_correction'">
       <TextareaField v-model="items" label="Exigências (uma por linha)" required :rows="5" :error="error?.firstError('items')" />
@@ -148,6 +157,8 @@ const eventOptions = computed(() => (props.catalog?.connection_events ?? []).map
 
     <template v-if="action === 'record_inspection'">
       <p v-if="openInspection" class="text-sm">Vistoria nº {{ openInspection.sequence }}</p>
+      <SelectField v-model="report" label="Relatório aprovado" required :options="documentOptions(['relatorio_vistoria', 'INSPECTION_REPORT'])" :error="error?.firstError('report_document_id')" />
+      <FormField v-model="performedAt" type="datetime-local" label="Realizada em" required :error="error?.firstError('performed_at')" />
       <SelectField
         v-model="inspectionApproved"
         label="Resultado"

@@ -42,7 +42,7 @@ final class RequirementEngine
         );
 
         $documents = $this->approvedDocumentTypes($project, $process);
-        $allDocuments = $this->currentDocuments($project, $process)->groupBy('document_type');
+        $allDocuments = $this->currentDocuments($project, $process)->groupBy(fn ($d) => DocumentTypes::legacy($d->document_type));
         $waivers = $project->waivers()->whereNull('revoked_at')->get()->keyBy('requirement_code');
 
         $items = [];
@@ -55,8 +55,9 @@ final class RequirementEngine
             $waiver = $waivers->get($rule->rule_code);
 
             if ($rule->kind === 'DOCUMENT') {
-                $docs = $allDocuments->get($rule->document_type, collect());
-                $satisfied = $documents->contains($rule->document_type);
+                $type = DocumentTypes::legacy($rule->document_type);
+                $docs = $allDocuments->get($type, collect());
+                $satisfied = $documents->contains($type);
                 $detail = $satisfied ? null : ($docs->isNotEmpty()
                     ? 'Documento enviado, aguardando aprovação na revisão interna.'
                     : 'Documento não enviado.');
@@ -170,8 +171,8 @@ final class RequirementEngine
     private function approvedDocumentTypes(SolarProject $project, ?HomologationProcess $process): Collection
     {
         return $this->currentDocuments($project, $process)
-            ->where('review_status', 'aprovado')
-            ->pluck('document_type')
+            ->filter(fn ($d) => $d->isValid() && $d->verifyHash())
+            ->map(fn ($d) => DocumentTypes::legacy($d->document_type))
             ->unique()
             ->values();
     }

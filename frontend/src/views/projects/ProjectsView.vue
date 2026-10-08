@@ -78,7 +78,7 @@ const { data, error, loading } = useApiQuery(source, (s) => api<Paginated<Projec
               <td class="px-4 py-3">
                 <RouterLink v-if="project.process" :to="`/processos/${project.process.id}`" class="hover:opacity-80">
                   <StatusBadge :tone="stageTone(project.process.stage, project.process.status)">
-                    {{ project.process.status === 'ACTIVE' ? project.process.stage_label : project.process.status_label }}
+                    {{ !['conectado', 'cancelado'].includes(project.process.status) ? project.process.stage_label : project.process.status_label }}
                   </StatusBadge>
                 </RouterLink>
               </td>

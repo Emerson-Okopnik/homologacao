@@ -3,6 +3,7 @@
 namespace App\Domain\Rules;
 
 use App\Domain\Rules\Models\VersionedRule;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -16,7 +17,7 @@ final class RuleResolver
      * @template T of VersionedRule
      *
      * @param  class-string<T>  $model
-     * @param  (callable(\Illuminate\Database\Eloquent\Builder<T>): void)|null  $filter
+     * @param  (callable(Builder<T>): mixed)|null  $filter
      * @return Collection<int, T>
      */
     public function resolve(string $model, Carbon $at, ?string $distributorCode, ?callable $filter = null): Collection

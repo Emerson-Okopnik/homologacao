@@ -4,9 +4,9 @@ namespace App\Domain\Homologations\Models;
 
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\Users\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
@@ -15,7 +15,7 @@ use LogicException;
  * @property string $title
  * @property string|null $description
  * @property array<string, mixed>|null $payload
- * @property Carbon $occurred_at
+ * @property CarbonInterface $occurred_at
  */
 class TimelineEvent extends Model
 {

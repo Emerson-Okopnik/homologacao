@@ -7,16 +7,18 @@ use App\Domain\Documents\Models\Document;
 use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\Users\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use Illuminate\Support\Carbon;
 
 /**
+ * @property-read HomologationProcess $process
+ * @property int $homologation_process_id
  * @property int $id
  * @property string $uuid
- * @property Carbon|null $started_at
- * @property Carbon $completed_at
+ * @property CarbonInterface|null $started_at
+ * @property CarbonInterface $completed_at
  * @property string|null $notes
  */
 class ProjectExecution extends Model
@@ -42,5 +44,11 @@ class ProjectExecution extends Model
     public function documents(): MorphToMany
     {
         return $this->morphToMany(Document::class, 'linkable', 'document_links')->withPivot(['document_type', 'is_current']);
+    }
+
+    /** @return BelongsTo<HomologationProcess, $this> */
+    public function process(): BelongsTo
+    {
+        return $this->belongsTo(HomologationProcess::class, 'homologation_process_id');
     }
 }

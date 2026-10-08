@@ -5,20 +5,22 @@ namespace App\Domain\Homologations\Models;
 use App\Domain\Homologations\Enums\DeadlineType;
 use App\Domain\Rules\Models\RuleDecision;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 
 /**
+ * @property-read HomologationProcess $process
+ * @property int $homologation_process_id
  * @property int $id
  * @property DeadlineType $deadline_type
  * @property string $status
- * @property Carbon $starts_at
- * @property Carbon $due_at
+ * @property CarbonInterface $starts_at
+ * @property CarbonInterface $due_at
  * @property int $days
  * @property string $day_count
  * @property int|null $rule_decision_id
- * @property Carbon|null $closed_at
+ * @property CarbonInterface|null $closed_at
  */
 class ProcessDeadline extends Model
 {
@@ -45,5 +47,11 @@ class ProcessDeadline extends Model
     public function decision(): BelongsTo
     {
         return $this->belongsTo(RuleDecision::class, 'rule_decision_id');
+    }
+
+    /** @return BelongsTo<HomologationProcess, $this> */
+    public function process(): BelongsTo
+    {
+        return $this->belongsTo(HomologationProcess::class, 'homologation_process_id');
     }
 }

@@ -4,8 +4,8 @@ namespace App\Domain\Projects\Models;
 
 use App\Domain\Audit\Concerns\Auditable;
 use App\Domain\Projects\Enums\ResponsibilityPurpose;
-use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\TechnicalResponsibles\Models\TechnicalResponsible;
+use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 

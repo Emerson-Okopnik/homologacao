@@ -5,6 +5,7 @@ namespace App\Domain\Rules\Models;
 use App\Domain\Rules\Enums\DecisionType;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
@@ -19,7 +20,7 @@ use LogicException;
  * @property array<string, mixed>|null $rule_snapshot
  * @property array<string, mixed> $facts
  * @property array<string, mixed> $result
- * @property \Illuminate\Support\Carbon $created_at
+ * @property Carbon $created_at
  */
 class RuleDecision extends Model
 {
@@ -48,6 +49,10 @@ class RuleDecision extends Model
         static::deleting(fn () => throw new LogicException('Decisões de regra são imutáveis.'));
     }
 
+    /**
+     * @param  array<string, mixed>  $facts
+     * @param  array<string, mixed>  $result
+     */
     public static function record(DecisionType $type, Model $subject, ?VersionedRule $rule, array $facts, array $result): self
     {
         return self::create([

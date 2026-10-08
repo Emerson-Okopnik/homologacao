@@ -7,12 +7,15 @@ use App\Domain\Distributors\Models\ExternalPendingItem;
 use App\Domain\Distributors\Models\ExternalProcess;
 use App\Domain\Distributors\Models\ExternalSubmission;
 use App\Domain\Distributors\Models\IntegrationEvent;
+use App\Domain\Documents\DocumentTypes;
 use App\Domain\Documents\Models\ProcessDocument;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\ProcessWorkflow;
 use App\Domain\Homologations\ValidationService;
 use App\Domain\Homologations\WorkflowDefinition;
 use App\Domain\Projects\ProjectVersionService;
+use App\Domain\Rules\Enums\RequirementPhase;
+use App\Domain\Rules\RequirementEngine;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Domain\Users\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -51,7 +54,15 @@ final class IntegrationService
                     throw new DomainException('Vincule um documento de resposta aprovado à pendência.', 'pending_response_required');
                 }
             }
-            $version = app(ProjectVersionService::class)->freeze($process->project, $actor, $data['change_reason'], $process);
+            $ruleChecklist = $data['rule_checklist'] ?? null;
+            if ($process->project->classification !== null) {
+                $phase = $data['kind'] === 'inspection' ? RequirementPhase::InspectionRequest : RequirementPhase::Submission;
+                $ruleChecklist ??= app(RequirementEngine::class)->evaluateAndRecord($process->project, $phase, $process);
+                if ($ruleChecklist['blocking']) {
+                    throw new DomainException('Requisitos pendentes: '.implode('; ', $ruleChecklist['blocking']), 'requirements_pending');
+                }
+            }
+            $version = app(ProjectVersionService::class)->freeze($process->project, $actor, $data['change_reason'], $process, $ruleChecklist);
             if ($pending && ! $version->documents()->whereKey($pending->response_document_id)->exists()) {
                 throw new DomainException('Use a versão atual do documento de resposta no dossiê.', 'pending_response_outdated');
             }
@@ -97,6 +108,7 @@ final class IntegrationService
                 throw new DomainException('Use o protocolo já vinculado ao processo.', 'protocol_mismatch', 409);
             }
             $submission->update(['status' => 'sent', 'submitted_at' => now(), 'external_receipt' => $data['external_receipt'], 'receipt_document_id' => $receipt->id]);
+            $process->update(['project_version_id' => $submission->project_version_id]);
             $submission->externalProcess->update(['external_protocol' => $protocol, 'external_status' => 'enviado', 'last_synced_at' => now()]);
             if ($submission->response_to_pending_item_id) {
                 $pending = ExternalPendingItem::query()->whereKey($submission->response_to_pending_item_id)->where('external_process_id', $submission->external_process_id)->lockForUpdate()->firstOrFail();
@@ -135,7 +147,7 @@ final class IntegrationService
     {
         return ProcessDocument::query()->where('uuid', $uuid)->where('solar_project_id', $process->solar_project_id)
             ->where(fn ($q) => $q->whereNull('homologation_process_id')->orWhere('homologation_process_id', $process->id))
-            ->when($type, fn ($q) => $q->where('document_type', $type))->firstOrFail();
+            ->when($type, fn ($q) => $q->whereIn('document_type', array_filter(array_column(DocumentTypes::options(), 'value'), fn ($key) => DocumentTypes::legacy($key) === $type)))->firstOrFail();
     }
 
     /** @param array<string, mixed> $payload */

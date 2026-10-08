@@ -20,7 +20,7 @@ final class DashboardController extends Controller
         $this->authorize('dashboard.view');
 
         $byStage = HomologationProcess::query()
-            ->where('status', ProcessStatus::Active->value)
+            ->whereNotIn('status', [ProcessStatus::Conectado->value, ProcessStatus::Cancelado->value])
             ->select('stage', DB::raw('count(*) as total'))
             ->groupBy('stage')
             ->pluck('total', 'stage');
@@ -33,11 +33,11 @@ final class DashboardController extends Controller
         $overdue = ProcessDeadline::query()
             ->where('status', 'OPEN')
             ->whereDate('due_at', '<', today())
-            ->whereHas('process', fn ($q) => $q->where('status', ProcessStatus::Active->value))
+            ->whereHas('process', fn ($q) => $q->whereNotIn('status', [ProcessStatus::Conectado->value, ProcessStatus::Cancelado->value]))
             ->count();
 
         $completedPower = SolarProject::query()
-            ->whereHas('process', fn ($q) => $q->where('status', ProcessStatus::Completed->value))
+            ->whereHas('process', fn ($q) => $q->where('status', ProcessStatus::Conectado->value))
             ->sum('considered_power_kw');
 
         $recent = HomologationProcess::query()
@@ -64,7 +64,7 @@ final class DashboardController extends Controller
                     'active' => (int) $byStage->sum(),
                     'waiting_distributor' => (int) $byStage->only($waiting)->sum(),
                     'in_correction' => (int) ($byStage[WorkflowStage::Correction->value] ?? 0),
-                    'completed' => HomologationProcess::query()->where('status', ProcessStatus::Completed->value)->count(),
+                    'completed' => HomologationProcess::query()->where('status', ProcessStatus::Conectado->value)->count(),
                     'overdue' => $overdue,
                     'open_pendencies' => ProcessPendency::query()->where('status', 'aberta')->count(),
                     'documents_to_review' => Document::query()->where('review_status', 'pendente')
