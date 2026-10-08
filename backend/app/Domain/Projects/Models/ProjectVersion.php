@@ -6,6 +6,7 @@ use App\Domain\Documents\Models\ProcessDocument;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Domain\Shared\TenantEntity;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Arr;
@@ -14,9 +15,22 @@ use Illuminate\Support\Arr;
  * @property array<string, mixed> $snapshot_json
  * @property int $solar_project_id
  * @property CarbonInterface $frozen_at
+ * @property string $reason
  */
 class ProjectVersion extends TenantEntity
 {
+    /** @return Attribute<array<string, mixed>, array<string, mixed>> */
+    protected function snapshot(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->snapshot_json, set: fn ($value) => ['snapshot_json' => json_encode($value, JSON_THROW_ON_ERROR), 'status' => 'frozen', 'frozen_at' => now()]);
+    }
+
+    /** @return Attribute<string, string> */
+    protected function reason(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->change_reason, set: fn ($value) => ['change_reason' => $value]);
+    }
+
     /** @var list<string> */
     protected array $auditExclude = ['snapshot_json'];
 

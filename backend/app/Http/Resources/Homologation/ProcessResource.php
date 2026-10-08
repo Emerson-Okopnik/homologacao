@@ -4,6 +4,7 @@ namespace App\Http\Resources\Homologation;
 
 use App\Domain\Documents\DocumentRequirements;
 use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Homologations\Models\ProcessDeadline;
 use App\Domain\Homologations\Models\WorkflowStage;
 use App\Domain\Homologations\ValidationService;
 use App\Domain\Homologations\WorkflowDefinition;
@@ -39,7 +40,55 @@ final class ProcessResource extends JsonResource
         /** @var WorkflowStage|null $stage */
         $stage = $this->resource->getRelationValue('currentStage');
 
+        $openDeadline = $this->relationLoaded('deadlines') ? $this->deadlines->firstWhere('status', 'OPEN') : null;
+
         return [
+            'stage' => $this->stage->value,
+            'stage_label' => $this->stage->label(),
+            'network_work_status' => $this->network_work_status->value,
+            'network_work_label' => $this->network_work_status->label(),
+            'stage_changed_at' => $this->stage_changed_at?->toIso8601String(),
+            'completed_at' => $this->completed_at?->toIso8601String(),
+            'open_deadline' => $openDeadline ? $this->deadline($openDeadline) : null,
+            'current_version' => $this->whenLoaded('currentVersion', fn () => $this->currentVersion ? [
+                'version' => $this->currentVersion->version,
+                'reason' => $this->currentVersion->reason,
+                'sha256' => $this->currentVersion->snapshot_sha256,
+                'created_at' => $this->currentVersion->created_at->toIso8601String(),
+            ] : null),
+            'deadlines' => $this->whenLoaded('deadlines', fn () => $this->deadlines->map(fn ($d) => $this->deadline($d))->values()),
+            'execution' => $this->whenLoaded('execution', fn () => $this->execution ? [
+                'id' => $this->execution->uuid,
+                'started_at' => $this->execution->started_at?->toDateString(),
+                'completed_at' => $this->execution->completed_at->toDateString(),
+                'notes' => $this->execution->notes,
+            ] : null),
+            'inspections' => $this->whenLoaded('inspections', fn () => $this->inspections->map(fn ($i) => [
+                'id' => $i->uuid,
+                'sequence' => $i->sequence,
+                'status' => $i->status->value,
+                'status_label' => $i->status->label(),
+                'requested_at' => $i->requested_at->toIso8601String(),
+                'scheduled_for' => $i->scheduled_for?->toDateString(),
+                'result_at' => $i->result_at?->toIso8601String(),
+                'result_notes' => $i->result_notes,
+                'is_open' => $i->status->isOpen(),
+            ])->values()),
+            'connection_events' => $this->whenLoaded('connectionEvents', fn () => $this->connectionEvents->map(fn ($e) => [
+                'id' => $e->uuid,
+                'type' => $e->type->value,
+                'type_label' => $e->type->label(),
+                'occurred_at' => $e->occurred_at->toIso8601String(),
+                'meter_number' => $e->meter_number,
+                'notes' => $e->notes,
+            ])->values()),
+            'timeline' => $this->whenLoaded('timeline', fn () => $this->timeline->map(fn ($t) => [
+                'type' => $t->type,
+                'title' => $t->title,
+                'description' => $t->description,
+                'user' => $t->user?->name,
+                'occurred_at' => $t->occurred_at->toIso8601String(),
+            ])->values()),
             'id' => $this->uuid,
             'code' => $this->code,
             'status' => $this->status->value,
@@ -101,5 +150,20 @@ final class ProcessResource extends JsonResource
         }
 
         return $result->all();
+    }
+
+    /** @return array<string, mixed> */
+    private function deadline(ProcessDeadline $d): array
+    {
+        return [
+            'type' => $d->deadline_type->value,
+            'label' => $d->deadline_type->label(),
+            'status' => $d->status,
+            'starts_at' => $d->starts_at->toIso8601String(),
+            'due_at' => $d->due_at->toDateString(),
+            'days' => $d->days,
+            'day_count' => $d->day_count,
+            'overdue' => $d->status === 'OPEN' && $d->due_at->lt(today()),
+        ];
     }
 }

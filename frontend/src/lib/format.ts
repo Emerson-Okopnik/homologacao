@@ -75,3 +75,18 @@ const statusTones: Record<string, Tone> = {
 export function statusTone(status: string): Tone {
   return statusTones[status] ?? 'neutral'
 }
+
+const stageTones: Record<string, Tone> = {
+  PREPARATION: 'neutral',
+  EXTERNAL_ANALYSIS: 'info',
+  CORRECTION: 'warning',
+  EXECUTION: 'info',
+  INSPECTION: 'warning',
+  CONNECTION: 'success',
+}
+
+export function stageTone(stage: string, status: string = 'ACTIVE'): Tone {
+  if (status === 'COMPLETED') return 'success'
+  if (status === 'CANCELLED') return 'danger'
+  return stageTones[stage] ?? 'neutral'
+}

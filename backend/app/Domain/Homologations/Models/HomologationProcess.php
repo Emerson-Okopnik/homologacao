@@ -8,7 +8,10 @@ use App\Domain\Distributors\Models\ExternalProcess;
 use App\Domain\Distributors\Models\ExternalSubmission;
 use App\Domain\Distributors\Models\IntegrationEvent;
 use App\Domain\Documents\Models\ProcessDocument;
+use App\Domain\Homologations\Enums\NetworkWorkStatus;
 use App\Domain\Homologations\Enums\ProcessStatus;
+use App\Domain\Homologations\Enums\WorkflowStage as ProcessStage;
+use App\Domain\Projects\Models\ProjectVersion;
 use App\Domain\Projects\Models\SolarProject;
 use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
@@ -21,6 +24,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property int $id
+ * @property ProcessStage $stage
+ * @property NetworkWorkStatus $network_work_status
+ * @property int|null $project_version_id
+ * @property CarbonInterface|null $stage_changed_at
+ * @property CarbonInterface|null $completed_at
+ * @property CarbonInterface|null $cancelled_at
  * @property string $uuid
  * @property int $tenant_id
  * @property int $solar_project_id
@@ -45,12 +54,13 @@ class HomologationProcess extends Model
     use BelongsToTenant;
     use HasPublicUuid;
 
-    protected $fillable = ['solar_project_id', 'distributor_id', 'assigned_user_id', 'code', 'status', 'protocol_number', 'due_date', 'current_stage_id', 'priority', 'opened_at', 'completed_at', 'process_type'];
+    protected $fillable = ['solar_project_id', 'distributor_id', 'assigned_user_id', 'code', 'status', 'protocol_number', 'due_date', 'current_stage_id', 'priority', 'opened_at', 'completed_at', 'process_type', 'project_version_id', 'stage', 'network_work_status', 'stage_changed_at', 'cancelled_at'];
 
     protected function casts(): array
     {
         return [
             'status' => ProcessStatus::class,
+            'stage' => ProcessStage::class, 'network_work_status' => NetworkWorkStatus::class, 'stage_changed_at' => 'datetime', 'cancelled_at' => 'datetime',
             'status_changed_at' => 'datetime',
             'submitted_at' => 'datetime',
             'approved_at' => 'datetime',
@@ -172,5 +182,46 @@ class HomologationProcess extends Model
     public function integrationEvents(): HasMany
     {
         return $this->hasMany(IntegrationEvent::class)->orderByDesc('id');
+    }
+
+    /** @return BelongsTo<ProjectVersion, $this> */
+    public function currentVersion(): BelongsTo
+    {
+        return $this->belongsTo(ProjectVersion::class, 'project_version_id');
+    }
+
+    /** @return HasOne<ProjectExecution, $this> */
+    public function execution(): HasOne
+    {
+        return $this->hasOne(ProjectExecution::class);
+    }
+
+    /** @return HasMany<Inspection, $this> */
+    public function inspections(): HasMany
+    {
+        return $this->hasMany(Inspection::class)->orderByDesc('sequence');
+    }
+
+    /** @return HasMany<ConnectionEvent, $this> */
+    public function connectionEvents(): HasMany
+    {
+        return $this->hasMany(ConnectionEvent::class)->orderByDesc('occurred_at');
+    }
+
+    /** @return HasMany<ProcessDeadline, $this> */
+    public function deadlines(): HasMany
+    {
+        return $this->hasMany(ProcessDeadline::class)->latest('id');
+    }
+
+    /** @return HasMany<TimelineEvent, $this> */
+    public function timeline(): HasMany
+    {
+        return $this->hasMany(TimelineEvent::class)->orderByDesc('occurred_at')->orderByDesc('id');
+    }
+
+    public function isActive(): bool
+    {
+        return ! $this->status->isTerminal();
     }
 }

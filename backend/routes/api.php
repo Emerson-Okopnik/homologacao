@@ -105,6 +105,15 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::post('external-credentials', [WorkflowConfigurationController::class, 'credential']);
     Route::post('checklist-items/{item}/review', [WorkflowConfigurationController::class, 'reviewChecklist']);
 
+    Route::get('projects/{project}/evaluation', [ProjectController::class, 'evaluation']);
+    Route::post('projects/{project}/fast-track-acceptances', [ProjectController::class, 'recordFastTrackAcceptance']);
+    Route::post('projects/{project}/waivers', [ProjectController::class, 'recordWaiver']);
+    Route::post('processes/{process}/actions/{action}', [ProcessController::class, 'action'])->middleware('throttle:60,1');
+    Route::post('inspections/{inspection}/schedule', [ProcessController::class, 'scheduleInspection']);
+    Route::post('inspections/{inspection}/result', [ProcessController::class, 'inspectionResult']);
+    Route::post('documents', [DocumentController::class, 'store'])->middleware('throttle:60,1');
+    Route::get('document-versions', [DocumentController::class, 'versions']);
+    Route::get('process-stages', [ProcessController::class, 'stages']);
     Route::get('process-statuses', [ProcessController::class, 'statuses']);
     Route::get('assignment-users', [ProcessController::class, 'assignmentUsers']);
     Route::get('processes', [ProcessController::class, 'index']);

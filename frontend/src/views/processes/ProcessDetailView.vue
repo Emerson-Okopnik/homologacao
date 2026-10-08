@@ -10,6 +10,7 @@ import PendencyDialog from './PendencyDialog.vue'
 import ReviewDialog from './ReviewDialog.vue'
 import TransitionDialog from './TransitionDialog.vue'
 import ProcessTrackingPanel from './ProcessTrackingPanel.vue'
+import ProcessPhasePanel from './ProcessPhasePanel.vue'
 import DocumentUploadDialog from '@/views/documents/DocumentUploadDialog.vue'
 import ChecklistReviewDialog from './ChecklistReviewDialog.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
@@ -328,6 +329,7 @@ const interactionLabels: Record<string, string> = {
       </div>
 
       <div id="sec-tracking" class="mt-6 scroll-mt-6"><ProcessTrackingPanel :process="process" :revision="version" @saved="reload" /></div>
+      <ProcessPhasePanel :process="process" @saved="reload" />
 
       <TransitionDialog v-if="transition" :process="process" :initial="transition.initial" @close="transition = null" @saved="reload" />
       <PendencyDialog v-if="pendencyDialog" :process-id="process.id" :resolving="pendencyDialog.resolving" @close="pendencyDialog = null" @saved="reload" />

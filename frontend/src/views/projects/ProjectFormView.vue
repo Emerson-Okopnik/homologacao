@@ -16,7 +16,7 @@ import { useApiQuery } from '@/composables/useApiQuery'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import { formatNumber } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
-import type { Client, ConsumerUnit, Distributor, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
+import type { Client, CompensationMode, ConsumerUnit, Distributor, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
 
 const MICRO_LIMIT_KW = 75
 const TYPE_LABEL: Record<Equipment['type'], string> = { module: 'Módulo', inverter: 'Inversor', battery: 'Bateria' }
@@ -51,14 +51,21 @@ const allEquipment = computed(() => uniqueById([...createdEquipment.value, ...(l
 const equipmentById = computed(() => new Map(allEquipment.value.map((e) => [e.id, e])))
 
 const form = reactive({
-  name: '', installation_type: '',
+  name: '',
+  installation_type: 'rooftop',
+  has_dispatch_controller: false,
+  declared_dispatchable: false,
+  has_coupling_transformer: false,
   client_id: typeof route.query.client === 'string' ? route.query.client : '',
   consumer_unit_id: '',
-  technical_responsible_id: '',
-  modality: 'autoconsumo_local',
-  installed_power_kwp: '',
-  inverter_power_kw: '',
+  project_rt_id: '',
+  project_art: '',
+  execution_rt_id: '',
+  execution_art: '',
+  compensation_mode: 'LOCAL_SELF_CONSUMPTION' as CompensationMode,
+  initial_protocol: '',
   has_battery: false,
+  storage_energy_kwh: '',
   estimated_generation_kwh_month: '',
   notes: '',
 })
@@ -69,7 +76,7 @@ const error = ref<ApiError | null>(null)
 
 const clientDialog = ref(false)
 const unitDialog = ref(false)
-const responsibleDialog = ref(false)
+const responsibleDialog = ref<'project' | 'execution' | null>(null)
 const equipmentDialog = shallowRef<{ type: Equipment['type']; rowIndex: number | null } | null>(null)
 const distributors = shallowRef<Distributor[] | null>(null)
 const notice = ref('')
@@ -81,15 +88,24 @@ watch(
     if (project.client && !lookups.value?.clients.some((c) => c.id === project.client!.id)) {
       createdClients.value.push(project.client as Client)
     }
+    const projectRt = project.responsibilities?.find((r) => r.purpose === 'PROJECT')
+    const executionRt = project.responsibilities?.find((r) => r.purpose === 'EXECUTION')
     Object.assign(form, {
-      name: project.name ?? project.code, installation_type: project.installation_type ?? '',
+      name: project.name ?? '',
+      installation_type: project.installation_type ?? 'rooftop',
+      has_dispatch_controller: project.has_dispatch_controller,
+      declared_dispatchable: project.declared_dispatchable,
+      has_coupling_transformer: project.has_coupling_transformer,
       client_id: project.client?.id ?? '',
       consumer_unit_id: project.consumer_unit?.id ?? '',
-      technical_responsible_id: project.technical_responsible?.id ?? '',
-      modality: project.modality,
-      installed_power_kwp: String(project.installed_power_kwp),
-      inverter_power_kw: String(project.inverter_power_kw),
+      project_rt_id: projectRt?.responsible.id ?? '',
+      project_art: projectRt?.art_number ?? '',
+      execution_rt_id: executionRt?.responsible.id ?? '',
+      execution_art: executionRt?.art_number ?? '',
+      compensation_mode: project.compensation_mode,
+      initial_protocol: project.initial_protocol ?? '',
       has_battery: project.has_battery,
+      storage_energy_kwh: project.storage_energy_kwh?.toString() ?? '',
       estimated_generation_kwh_month: project.estimated_generation_kwh_month?.toString() ?? '',
       notes: project.notes ?? '',
     })
@@ -130,18 +146,12 @@ const equipmentOptions = computed(() =>
 )
 
 const numeric = (v: string) => (v.trim() === '' ? null : Number(v.replace(',', '.')))
-const accessPower = computed(() => {
-  const kwp = numeric(form.installed_power_kwp)
-  const kw = numeric(form.inverter_power_kw)
-  if (!kwp || !kw) return null
-  return Math.min(kwp, kw)
-})
-const generationType = computed(() => (accessPower.value === null ? null : accessPower.value <= MICRO_LIMIT_KW ? 'Microgeração' : 'Minigeração'))
-
 function totalKw(type: Equipment['type']) {
   const total = items.value.reduce((sum, item) => {
     const eq = equipmentById.value.get(item.id)
-    return eq?.type === type && eq.power_w ? sum + (eq.power_w * Number(item.quantity || 0)) / 1000 : sum
+    if (eq?.type !== type) return sum
+    const power = type === 'inverter' && eq.nominal_ac_power_kw != null ? eq.nominal_ac_power_kw : (eq.power_w ?? 0) / 1000
+    return sum + power * Number(item.quantity || 0)
   }, 0)
   return Math.round(total * 1000) / 1000
 }
@@ -149,12 +159,14 @@ const moduleTotalKwp = computed(() => totalKw('module'))
 const inverterTotalKw = computed(() => totalKw('inverter'))
 const hasBatteryItem = computed(() => items.value.some((i) => equipmentById.value.get(i.id)?.type === 'battery'))
 
-watch(moduleTotalKwp, (total, old) => {
-  if (total && (form.installed_power_kwp === '' || numeric(form.installed_power_kwp) === old)) form.installed_power_kwp = String(total)
+const accessPower = computed(() => {
+  if (!moduleTotalKwp.value || !inverterTotalKw.value) return null
+  return Math.min(moduleTotalKwp.value, inverterTotalKw.value)
 })
-watch(inverterTotalKw, (total, old) => {
-  if (total && (form.inverter_power_kw === '' || numeric(form.inverter_power_kw) === old)) form.inverter_power_kw = String(total)
-})
+const generationType = computed(() =>
+  accessPower.value === null ? null : accessPower.value <= MICRO_LIMIT_KW ? 'Microgeração (prévia)' : 'Minigeração (prévia)',
+)
+
 watch(hasBatteryItem, (has) => {
   if (has) form.has_battery = true
 })
@@ -192,8 +204,10 @@ function onUnitSaved(unit: ConsumerUnit) {
 
 function onResponsibleSaved(rt: TechnicalResponsible) {
   createdResponsibles.value.unshift(rt)
-  responsibleDialog.value = false
-  form.technical_responsible_id = rt.id
+  const target = responsibleDialog.value
+  responsibleDialog.value = null
+  if (target === 'execution') form.execution_rt_id = rt.id
+  else form.project_rt_id = rt.id
 }
 
 function onEquipmentSaved(eq: Equipment) {
@@ -211,16 +225,25 @@ function addRow() {
 async function submit() {
   submitting.value = true
   error.value = null
+  const body = {
+    ...(form.name.trim() ? { name: form.name.trim() } : {}),
+    installation_type: form.installation_type,
+    has_dispatch_controller: form.has_dispatch_controller,
+    declared_dispatchable: form.declared_dispatchable,
+    has_coupling_transformer: form.has_coupling_transformer,
+    client_id: form.client_id,
+    consumer_unit_id: form.consumer_unit_id,
+    compensation_mode: form.compensation_mode,
+    initial_protocol: form.initial_protocol || null,
+    has_battery: form.has_battery,
+    storage_energy_kwh: form.has_battery ? numeric(form.storage_energy_kwh) : null,
+    estimated_generation_kwh_month: numeric(form.estimated_generation_kwh_month),
+    notes: form.notes || null,
+    project_rt: form.project_rt_id ? { id: form.project_rt_id, art_number: form.project_art || null } : null,
+    execution_rt: form.execution_rt_id ? { id: form.execution_rt_id, art_number: form.execution_art || null } : null,
+    equipment: items.value.filter((i) => i.id).map((i) => ({ id: i.id, quantity: Number(i.quantity) })),
+  }
   try {
-    const body = {
-      ...form,
-      name: form.name || undefined, installation_type: form.installation_type || null,
-      technical_responsible_id: form.technical_responsible_id || null,
-      installed_power_kwp: numeric(form.installed_power_kwp),
-      inverter_power_kw: numeric(form.inverter_power_kw),
-      estimated_generation_kwh_month: numeric(form.estimated_generation_kwh_month),
-      equipment: items.value.filter((i) => i.id).map((i) => ({ id: i.id, quantity: Number(i.quantity) })),
-    }
     const result = projectId.value
       ? await api<{ data: Project }>(`/projects/${projectId.value}`, { method: 'PUT', body })
       : await api<{ data: Project }>('/projects', { method: 'POST', body })
@@ -245,8 +268,8 @@ async function submit() {
       description="Selecione ou cadastre tudo aqui mesmo. Ao salvar, o processo de homologação é aberto com o checklist de documentos."
     />
 
-    <InlineAlert v-if="lookupError" :correlation-id="lookupError.correlationId">{{ lookupError.message }}</InlineAlert>
     <RouterLink v-if="projectId" :to="`/projetos/${projectId}/dados-tecnicos`" class="mb-4 inline-block text-sm font-medium text-primary">Dados técnicos, ART/TRT e versões</RouterLink>
+    <InlineAlert v-if="lookupError" :correlation-id="lookupError.correlationId">{{ lookupError.message }}</InlineAlert>
 
     <form v-else class="flex flex-col gap-6" novalidate @submit.prevent="submit">
       <InlineAlert v-if="error && Object.keys(error.errors).length === 0" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
@@ -255,12 +278,15 @@ async function submit() {
       <p v-if="notice" class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-ink" role="status">{{ notice }}</p>
 
       <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-holder">
-        <div class="grid gap-4 sm:grid-cols-2"><FormField v-model="form.name" label="Nome do projeto" :error="error?.firstError('name')" /><SelectField v-model="form.installation_type" label="Tipo de instalação" placeholder="Definir depois" :options="[{value:'rooftop',label:'Telhado'},{value:'ground',label:'Solo'},{value:'other',label:'Outra'}]" :error="error?.firstError('installation_type')" /></div>
         <div class="flex items-center gap-3">
           <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">1</span>
           <h2 id="sec-holder" class="font-semibold">Titular e unidade consumidora</h2>
         </div>
 
+        <div class="grid gap-4 sm:grid-cols-2">
+          <FormField v-model="form.name" label="Nome do projeto" :error="error?.firstError('name')" />
+          <SelectField v-model="form.installation_type" label="Tipo de instalação" :options="[{ value: 'rooftop', label: 'Telhado' }, { value: 'ground', label: 'Solo' }, { value: 'other', label: 'Outro' }]" />
+        </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="flex flex-col gap-1.5">
             <SelectField
@@ -304,25 +330,39 @@ async function submit() {
           </div>
         </div>
 
-        <div class="flex flex-col gap-1.5">
-          <SelectField
-            v-model="form.technical_responsible_id"
-            label="Responsável técnico"
-            placeholder="Definir depois"
-            :options="responsibleOptions"
-            hint="Obrigatório antes do envio à distribuidora."
-            :error="error?.firstError('technical_responsible_id')"
-          />
-          <button
-            v-if="auth.can('technical_responsibles.manage')"
-            type="button"
-            class="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary hover:underline"
-            @click="responsibleDialog = true"
-          >
-            <UserPlus class="size-4" aria-hidden="true" />
-            Cadastrar responsável técnico
-          </button>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <SelectField
+              v-model="form.project_rt_id"
+              label="RT do projeto"
+              placeholder="Definir depois"
+              :options="responsibleOptions"
+              hint="Obrigatório antes do protocolo."
+              :error="error?.firstError('project_rt.id')"
+            />
+            <FormField v-if="form.project_rt_id" v-model="form.project_art" label="Nº ART/TRT de projeto" :error="error?.firstError('project_rt.art_number')" />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <SelectField
+              v-model="form.execution_rt_id"
+              label="RT da execução"
+              placeholder="Definir depois"
+              :options="responsibleOptions"
+              hint="Pode ser informado após a aprovação."
+              :error="error?.firstError('execution_rt.id')"
+            />
+            <FormField v-if="form.execution_rt_id" v-model="form.execution_art" label="Nº ART/TRT de execução" :error="error?.firstError('execution_rt.art_number')" />
+          </div>
         </div>
+        <button
+          v-if="auth.can('technical_responsibles.manage')"
+          type="button"
+          class="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary hover:underline"
+          @click="responsibleDialog = form.project_rt_id && !form.execution_rt_id ? 'execution' : 'project'"
+        >
+          <UserPlus class="size-4" aria-hidden="true" />
+          Cadastrar responsável técnico
+        </button>
       </section>
 
       <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-eq">
@@ -425,32 +465,20 @@ async function submit() {
             {{ generationType }} · potência de acesso {{ formatNumber(accessPower, 'kW') }}
           </p>
         </div>
-        <p class="text-sm text-muted">As potências são preenchidas automaticamente pela soma dos equipamentos. Você pode ajustar se precisar.</p>
-        <SelectField
-          v-model="form.modality"
-          label="Modalidade de compensação"
-          :options="[
-            { value: 'autoconsumo_local', label: 'Autoconsumo local' },
-            { value: 'autoconsumo_remoto', label: 'Autoconsumo remoto' },
-            { value: 'geracao_compartilhada', label: 'Geração compartilhada' },
-            { value: 'multiplas_uc', label: 'Múltiplas unidades consumidoras' },
-          ]"
-          :error="error?.firstError('modality')"
-        />
-        <div class="grid gap-4 sm:grid-cols-3">
-          <FormField
-            v-model="form.installed_power_kwp"
-            label="Potência dos módulos (kWp)"
-            type="number"
-            required
-            :error="error?.firstError('installed_power_kwp')"
-          />
-          <FormField
-            v-model="form.inverter_power_kw"
-            label="Potência dos inversores (kW)"
-            type="number"
-            required
-            :error="error?.firstError('inverter_power_kw')"
+        <p class="text-sm text-muted">
+          As potências vêm da soma dos equipamentos. A classificação e a elegibilidade ao fast track são decididas pelas regras vigentes ao salvar.
+        </p>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <SelectField
+            v-model="form.compensation_mode"
+            label="Modalidade de compensação"
+            :options="[
+              { value: 'LOCAL_SELF_CONSUMPTION', label: 'Autoconsumo local' },
+              { value: 'REMOTE_SELF_CONSUMPTION', label: 'Autoconsumo remoto' },
+              { value: 'SHARED_GENERATION', label: 'Geração compartilhada' },
+              { value: 'MULTIPLE_UNITS', label: 'Múltiplas unidades consumidoras' },
+            ]"
+            :error="error?.firstError('compensation_mode')"
           />
           <FormField
             v-model="form.estimated_generation_kwh_month"
@@ -459,10 +487,31 @@ async function submit() {
             :error="error?.firstError('estimated_generation_kwh_month')"
           />
         </div>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="form.has_battery" type="checkbox" class="size-4 accent-primary" />
-          Sistema com armazenamento (bateria)
-        </label>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex items-center gap-2 self-center text-sm">
+            <input v-model="form.has_battery" type="checkbox" class="size-4 accent-primary" />
+            Sistema com armazenamento (bateria)
+          </label>
+          <FormField
+            v-if="form.has_battery"
+            v-model="form.storage_energy_kwh"
+            label="Energia armazenável (kWh)"
+            type="number"
+            required
+            :error="error?.firstError('storage_energy_kwh')"
+          />
+        </div>
+        <FormField
+          v-model="form.initial_protocol"
+          label="Protocolo inicial (opcional)"
+          hint="Se a solicitação já foi aberta no portal da distribuidora."
+          :error="error?.firstError('initial_protocol')"
+        />
+        <div class="flex flex-col gap-2 text-sm">
+          <label class="flex items-center gap-2"><input v-model="form.has_dispatch_controller" type="checkbox" class="size-4 accent-primary" />Possui controlador de despacho</label>
+          <label class="flex items-center gap-2"><input v-model="form.declared_dispatchable" type="checkbox" class="size-4 accent-primary" />Geração declarada despachável</label>
+          <label class="flex items-center gap-2"><input v-model="form.has_coupling_transformer" type="checkbox" class="size-4 accent-primary" />Possui transformador de acoplamento</label>
+        </div>
         <TextareaField v-model="form.notes" label="Observações técnicas" :rows="3" :error="error?.firstError('notes')" />
       </section>
 
@@ -483,7 +532,7 @@ async function submit() {
       @close="unitDialog = false"
       @saved="onUnitSaved"
     />
-    <ResponsibleDialog v-if="responsibleDialog" :item="null" @close="responsibleDialog = false" @saved="onResponsibleSaved" />
+    <ResponsibleDialog v-if="responsibleDialog" :item="null" @close="responsibleDialog = null" @saved="onResponsibleSaved" />
     <EquipmentDialog
       v-if="equipmentDialog"
       :item="null"

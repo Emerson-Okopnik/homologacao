@@ -2,7 +2,7 @@
 
 namespace App\Http\Resources\Homologation;
 
-use App\Domain\Documents\DocumentRequirements;
+use App\Domain\Documents\DocumentTypes;
 use App\Domain\Documents\Models\ProcessDocument;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -22,7 +22,9 @@ final class DocumentResource extends JsonResource
             'process_id' => $this->process?->uuid,
             'project' => $this->whenLoaded('project', fn () => $this->project ? ['id' => $this->project->uuid, 'code' => $this->project->code, 'client' => $this->project->client?->name] : null),
             'document_type' => $this->document_type,
-            'type_label' => DocumentRequirements::label($this->document_type),
+            'type_label' => DocumentTypes::label($this->document_type),
+            'owner' => DocumentTypes::owner($this->document_type),
+            'links' => $this->whenLoaded('links', fn () => $this->links->map(fn ($link) => ['type' => $link->linkable_type, 'is_current' => $link->is_current, 'label' => $link->linkable_type])),
             'version' => $this->version,
             'is_current' => $this->is_current,
             'original_name' => $this->original_name,

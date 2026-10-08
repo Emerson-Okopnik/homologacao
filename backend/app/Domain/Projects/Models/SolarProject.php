@@ -8,6 +8,9 @@ use App\Domain\Clients\Models\Client;
 use App\Domain\ConsumerUnits\Models\ConsumerUnit;
 use App\Domain\Documents\Models\ProcessDocument;
 use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Projects\Enums\CompensationMode;
+use App\Domain\Projects\Enums\GenerationClassification;
+use App\Domain\Projects\Enums\ResponsibilityPurpose;
 use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Domain\TechnicalResponsibles\Models\TechnicalResponsible;
@@ -22,6 +25,19 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property CompensationMode $compensation_mode
+ * @property GenerationClassification|null $classification
+ * @property int|null $service_request_id
+ * @property int|null $classification_decision_id
+ * @property int|null $fast_track_decision_id
+ * @property string $source_type
+ * @property string $considered_power_kw
+ * @property string|null $compensation_method
+ * @property string|null $storage_energy_kwh
+ * @property bool $has_dispatch_controller
+ * @property bool $declared_dispatchable
+ * @property bool $has_coupling_transformer
+ * @property bool $fast_track_eligible
  * @property string $uuid
  * @property int $tenant_id
  * @property int $client_id
@@ -60,7 +76,7 @@ class SolarProject extends Model
     protected $fillable = [
         'client_id', 'consumer_unit_id', 'technical_responsible_id', 'code', 'generation_type', 'modality',
         'installed_power_kwp', 'inverter_power_kw', 'has_battery', 'estimated_generation_kwh_month', 'notes', 'created_by',
-        'name', 'status', 'installation_type',
+        'name', 'status', 'installation_type', 'service_request_id', 'source_type', 'considered_power_kw', 'storage_energy_kwh', 'has_dispatch_controller', 'declared_dispatchable', 'has_coupling_transformer', 'compensation_mode', 'compensation_method', 'classification', 'classification_decision_id', 'fast_track_eligible', 'fast_track_decision_id',
     ];
 
     protected function casts(): array
@@ -69,7 +85,7 @@ class SolarProject extends Model
             'installed_power_kwp' => 'decimal:3',
             'inverter_power_kw' => 'decimal:3',
             'estimated_generation_kwh_month' => 'decimal:2',
-            'has_battery' => 'boolean',
+            'has_battery' => 'boolean', 'compensation_mode' => CompensationMode::class, 'classification' => GenerationClassification::class, 'has_dispatch_controller' => 'boolean', 'declared_dispatchable' => 'boolean', 'has_coupling_transformer' => 'boolean', 'fast_track_eligible' => 'boolean', 'considered_power_kw' => 'decimal:3', 'storage_energy_kwh' => 'decimal:2',
         ];
     }
 
@@ -194,5 +210,45 @@ class SolarProject extends Model
     public static function classify(float $accessPowerKw): string
     {
         return $accessPowerKw <= self::MICRO_LIMIT_KW ? 'micro' : 'mini';
+    }
+
+    /** @return BelongsTo<ServiceRequest, $this> */
+    public function serviceRequest(): BelongsTo
+    {
+        return $this->belongsTo(ServiceRequest::class);
+    }
+
+    /** @return HasMany<CompensationUnit, $this> */
+    public function compensationUnits(): HasMany
+    {
+        return $this->hasMany(CompensationUnit::class);
+    }
+
+    /** @return HasMany<TechnicalResponsibility, $this> */
+    public function responsibilities(): HasMany
+    {
+        return $this->hasMany(TechnicalResponsibility::class);
+    }
+
+    public function responsibility(ResponsibilityPurpose $purpose): ?TechnicalResponsibility
+    {
+        return $this->responsibilities->firstWhere('purpose', $purpose);
+    }
+
+    /** @return HasMany<FastTrackAcceptance, $this> */
+    public function fastTrackAcceptances(): HasMany
+    {
+        return $this->hasMany(FastTrackAcceptance::class);
+    }
+
+    /** @return HasMany<RequirementWaiver, $this> */
+    public function waivers(): HasMany
+    {
+        return $this->hasMany(RequirementWaiver::class);
+    }
+
+    public function isEditable(): bool
+    {
+        return ! $this->processes()->whereNotIn('status', ['rascunho', 'em_preparacao', 'pendencia_distribuidora', 'reprovado', 'cancelado', 'conectado'])->exists();
     }
 }

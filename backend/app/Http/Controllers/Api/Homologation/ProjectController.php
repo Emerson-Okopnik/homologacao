@@ -6,8 +6,16 @@ use App\Domain\Catalog\Models\EquipmentItem;
 use App\Domain\Clients\Models\Client;
 use App\Domain\ConsumerUnits\Models\ConsumerUnit;
 use App\Domain\Homologations\HomologationService;
+use App\Domain\Homologations\TimelineRecorder;
+use App\Domain\Projects\Enums\FastTrackParty;
 use App\Domain\Projects\Models\SolarProject;
+use App\Domain\Projects\ProjectEvaluator;
+use App\Domain\Projects\ProjectFormAdapter;
 use App\Domain\Projects\ProjectTechnicalData;
+use App\Domain\Rules\Enums\RequirementPhase;
+use App\Domain\Rules\Models\RequirementRule;
+use App\Domain\Rules\Models\RuleDecision;
+use App\Domain\Rules\RequirementEngine;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Domain\Shared\SequentialCode;
 use App\Domain\TechnicalResponsibles\Models\TechnicalResponsible;
@@ -21,6 +29,23 @@ use Illuminate\Validation\Rule;
 
 final class ProjectController extends Controller
 {
+    public const FAST_TRACK_STATEMENT_VERSION = '2026.1';
+
+    public const FAST_TRACK_STATEMENT = 'Declaro ciência de que a solicitação seguirá o rito simplificado (Fast Track), '
+        .'responsabilizando-me pela veracidade das informações e pela conformidade da instalação às normas da distribuidora.';
+
+    private const RELATIONS = [
+        'client', 'consumerUnit.distributor', 'serviceRequest', 'equipment',
+        'responsibilities.responsible', 'compensationUnits.consumerUnit',
+        'fastTrackAcceptances', 'waivers', 'process', 'processes', 'technicalResponsible',
+    ];
+
+    public function __construct(
+        private readonly ProjectEvaluator $evaluator,
+        private readonly RequirementEngine $requirements,
+        private readonly TimelineRecorder $timeline,
+    ) {}
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $this->authorize('projects.view');
@@ -48,7 +73,7 @@ final class ProjectController extends Controller
     {
         $this->authorize('projects.view');
 
-        return ProjectResource::make($project->load(['client', 'consumerUnit.distributor', 'technicalResponsible', 'equipment', 'process', 'processes']));
+        return ProjectResource::make($project->load(self::RELATIONS));
     }
 
     /**
@@ -58,6 +83,7 @@ final class ProjectController extends Controller
     {
         $this->authorize('projects.manage');
 
+        app(ProjectFormAdapter::class)->normalize($request);
         $data = $this->validated($request);
 
         $project = DB::transaction(function () use ($data, $request): SolarProject {
@@ -67,10 +93,15 @@ final class ProjectController extends Controller
                 'created_by' => $request->user()->id,
             ]);
             $this->syncEquipment($project, $data['equipment']);
+            app(ProjectFormAdapter::class)->persist($request, $project);
 
             $project->refresh()->load('equipment', 'consumerUnit');
             app(ProjectTechnicalData::class)->seedFromEquipment($project);
-            app(HomologationService::class)->open($project, $request->user());
+            $opened = app(HomologationService::class)->open($project, $request->user());
+            $this->timeline->record($opened, 'CREATED', 'Processo aberto');
+            if ($request->has('compensation_mode')) {
+                $this->evaluator->evaluate($project);
+            }
 
             return $project;
         });
@@ -86,9 +117,10 @@ final class ProjectController extends Controller
         $project->assertEditable();
         $process = $project->process;
 
+        app(ProjectFormAdapter::class)->normalize($request);
         $data = $this->validated($request);
 
-        DB::transaction(function () use ($project, $data, $process): void {
+        DB::transaction(function () use ($project, $data, $process, $request): void {
             SolarProject::query()->whereKey($project->id)->lockForUpdate()->firstOrFail()->assertEditable();
             $before = $project->equipment()->get()->mapWithKeys(fn ($e) => [$e->id => (int) $e->pivot->getAttribute('quantity')])->all();
             $after = collect($data['equipment'])->mapWithKeys(fn ($e) => [$e['id'] => $e['quantity']])->all();
@@ -101,6 +133,7 @@ final class ProjectController extends Controller
                 $project->compensation()->update(['mode' => $project->modality]);
             }
             $this->syncEquipment($project, $data['equipment']);
+            app(ProjectFormAdapter::class)->persist($request, $project);
             if ($before != $after) {
                 $project->arrays()->delete();
                 $project->inverters()->delete();
@@ -109,13 +142,16 @@ final class ProjectController extends Controller
             $project->unsetRelations()->load('equipment', 'consumerUnit');
             app(ProjectTechnicalData::class)->seedFromEquipment($project);
 
+            if ($request->has('compensation_mode')) {
+                $this->evaluator->evaluate($project);
+            }
             if ($process) {
                 $unit = ConsumerUnit::query()->findOrFail($project->consumer_unit_id);
                 $process->update(['distributor_id' => $unit->distributor_id]);
             }
         });
 
-        return ProjectResource::make($project->refresh()->load(['client', 'consumerUnit.distributor', 'technicalResponsible', 'equipment', 'process']));
+        return ProjectResource::make($project->refresh()->load(self::RELATIONS));
     }
 
     /**
@@ -140,8 +176,8 @@ final class ProjectController extends Controller
             'consumer_unit_id' => ['required', 'uuid'],
             'technical_responsible_id' => ['nullable', 'uuid'],
             'modality' => ['required', Rule::in(array_keys(SolarProject::MODALITIES))],
-            'installed_power_kwp' => ['required', 'numeric', 'gt:0', 'max:5000'],
-            'inverter_power_kw' => ['required', 'numeric', 'gt:0', 'max:5000'],
+            'installed_power_kwp' => ['required', 'numeric', $request->has('compensation_mode') ? 'min:0' : 'gt:0', 'max:5000'],
+            'inverter_power_kw' => ['required', 'numeric', $request->has('compensation_mode') ? 'min:0' : 'gt:0', 'max:5000'],
             'has_battery' => ['sometimes', 'boolean'],
             'estimated_generation_kwh_month' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:5000'],
@@ -204,5 +240,109 @@ final class ProjectController extends Controller
             ],
             'equipment' => $equipment,
         ];
+    }
+
+    public function evaluation(Request $request, SolarProject $project): JsonResponse
+    {
+        $this->authorize('projects.view');
+
+        $phase = RequirementPhase::tryFrom((string) $request->query('phase', 'SUBMISSION')) ?? RequirementPhase::Submission;
+        $classification = $project->classification_decision_id ? RuleDecision::find($project->classification_decision_id) : null;
+        $fastTrack = $project->fast_track_decision_id ? RuleDecision::find($project->fast_track_decision_id) : null;
+        $checklist = $this->requirements->evaluate($project, $phase);
+
+        return response()->json(['data' => [
+            'powers' => [
+                'modules_kwp' => (float) $project->installed_power_kwp,
+                'inverters_kw' => (float) $project->inverter_power_kw,
+                'considered_kw' => (float) $project->considered_power_kw,
+            ],
+            'classification' => [
+                'value' => $project->classification?->value,
+                'label' => $project->classification?->label(),
+                'rule_code' => $classification?->rule_code,
+                'rule_version' => $classification?->rule_version,
+                'reason' => $classification?->result['reason'] ?? null,
+                'decided_at' => $classification?->created_at?->toIso8601String(),
+            ],
+            'fast_track' => [
+                'eligible' => (bool) $project->fast_track_eligible,
+                'rule_code' => $fastTrack?->rule_code,
+                'rule_version' => $fastTrack?->rule_version,
+                'reasons' => $fastTrack?->result['reasons'] ?? [],
+                'statement_version' => self::FAST_TRACK_STATEMENT_VERSION,
+                'statement' => self::FAST_TRACK_STATEMENT,
+            ],
+            'checklist' => collect($checklist)->except('facts')->all(),
+        ]]);
+    }
+
+    public function recordFastTrackAcceptance(Request $request, SolarProject $project): ProjectResource
+    {
+        $this->authorize('projects.manage');
+        $this->assertEditable($project);
+
+        if (! $project->fast_track_eligible) {
+            throw new DomainException('O projeto não é elegível ao Fast Track pelas regras vigentes.', 'fast_track_not_eligible');
+        }
+
+        $data = $request->validate([
+            'party' => ['required', Rule::enum(FastTrackParty::class)],
+            'signer_name' => ['required', 'string', 'max:160'],
+            'signer_document' => ['nullable', 'string', 'max:30'],
+            'confirm' => ['accepted'],
+        ], ['confirm.accepted' => 'É necessário confirmar o aceite.']);
+
+        DB::transaction(function () use ($project, $data, $request): void {
+            $project->fastTrackAcceptances()->where('party', $data['party'])->whereNull('revoked_at')->update(['revoked_at' => now()]);
+            $project->fastTrackAcceptances()->create([
+                'party' => $data['party'],
+                'signer_name' => $data['signer_name'],
+                'signer_document' => $data['signer_document'] ?? null,
+                'statement_version' => self::FAST_TRACK_STATEMENT_VERSION,
+                'statement_text' => self::FAST_TRACK_STATEMENT,
+                'recorded_by' => $request->user()->id,
+                'accepted_at' => now(),
+            ]);
+
+            if ($project->process) {
+                $party = FastTrackParty::from($data['party'])->label();
+                $this->timeline->record($project->process, 'FAST_TRACK_ACCEPTED', "Aceite Fast Track registrado ({$party})", $data['signer_name']);
+            }
+        });
+
+        return ProjectResource::make($project->refresh()->load(self::RELATIONS));
+    }
+
+    public function recordWaiver(Request $request, SolarProject $project): ProjectResource
+    {
+        $this->authorize('homologations.manage');
+        $this->assertEditable($project);
+
+        $data = $request->validate([
+            'requirement_code' => ['required', 'string', 'max:60'],
+            'reason' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+
+        $waivable = RequirementRule::query()->where('rule_code', $data['requirement_code'])->where('waivable', true)->exists();
+        if (! $waivable) {
+            throw new DomainException('Este requisito não admite dispensa.', 'requirement_not_waivable');
+        }
+
+        DB::transaction(function () use ($project, $data, $request): void {
+            $project->waivers()->where('requirement_code', $data['requirement_code'])->whereNull('revoked_at')->update(['revoked_at' => now()]);
+            $project->waivers()->create([...$data, 'authorized_by' => $request->user()->id]);
+
+            if ($project->process) {
+                $this->timeline->record($project->process, 'REQUIREMENT_WAIVED', "Requisito dispensado: {$data['requirement_code']}", $data['reason']);
+            }
+        });
+
+        return ProjectResource::make($project->refresh()->load(self::RELATIONS));
+    }
+
+    private function assertEditable(SolarProject $project): void
+    {
+        $project->assertEditable();
     }
 }

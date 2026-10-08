@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api\Homologation;
 
-use App\Domain\Documents\Models\ProcessDocument;
+use App\Domain\Documents\Models\Document;
 use App\Domain\Homologations\Enums\ProcessStatus;
+use App\Domain\Homologations\Enums\WorkflowStage;
 use App\Domain\Homologations\Models\HomologationProcess;
+use App\Domain\Homologations\Models\ProcessDeadline;
 use App\Domain\Homologations\Models\ProcessPendency;
 use App\Domain\Projects\Models\SolarProject;
 use App\Http\Controllers\Controller;
@@ -17,61 +19,64 @@ final class DashboardController extends Controller
     {
         $this->authorize('dashboard.view');
 
-        $byStatus = HomologationProcess::query()
-            ->select('status', DB::raw('count(*) as total'))
-            ->groupBy('status')
-            ->pluck('total', 'status');
-
-        $closed = [ProcessStatus::Conectado->value, ProcessStatus::Cancelado->value, ProcessStatus::Reprovado->value];
-        $waitingDistributor = [ProcessStatus::Enviado->value, ProcessStatus::EmAnalise->value, ProcessStatus::VistoriaSolicitada->value];
+        $byStage = HomologationProcess::query()
+            ->where('status', ProcessStatus::Active->value)
+            ->select('stage', DB::raw('count(*) as total'))
+            ->groupBy('stage')
+            ->pluck('total', 'stage');
 
         $avgDays = HomologationProcess::query()
             ->whereNotNull('submitted_at')->whereNotNull('approved_at')
             ->get(['submitted_at', 'approved_at'])
             ->avg(fn ($p) => $p->submitted_at->diffInDays($p->approved_at));
 
-        $overdue = HomologationProcess::query()
-            ->whereNotIn('status', $closed)
-            ->whereNotNull('due_date')
-            ->whereDate('due_date', '<', today())
+        $overdue = ProcessDeadline::query()
+            ->where('status', 'OPEN')
+            ->whereDate('due_at', '<', today())
+            ->whereHas('process', fn ($q) => $q->where('status', ProcessStatus::Active->value))
             ->count();
 
-        $connectedPower = SolarProject::query()
-            ->whereHas('process', fn ($q) => $q->where('status', ProcessStatus::Conectado->value))
-            ->sum('installed_power_kwp');
+        $completedPower = SolarProject::query()
+            ->whereHas('process', fn ($q) => $q->where('status', ProcessStatus::Completed->value))
+            ->sum('considered_power_kw');
 
         $recent = HomologationProcess::query()
             ->with(['project.client'])
-            ->latest('status_changed_at')
+            ->latest('stage_changed_at')
             ->limit(6)
             ->get()
             ->map(fn (HomologationProcess $p) => [
                 'id' => $p->uuid,
                 'code' => $p->code,
                 'client' => $p->project?->client?->name,
+                'stage' => $p->stage->value,
+                'stage_label' => $p->stage->label(),
                 'status' => $p->status->value,
                 'status_label' => $p->status->label(),
-                'status_changed_at' => $p->status_changed_at?->toIso8601String(),
+                'stage_changed_at' => $p->stage_changed_at?->toIso8601String(),
             ]);
+
+        $waiting = [WorkflowStage::ExternalAnalysis->value, WorkflowStage::Inspection->value];
 
         return response()->json([
             'data' => [
                 'totals' => [
-                    'active' => $byStatus->except($closed)->sum(),
-                    'waiting_distributor' => $byStatus->only($waitingDistributor)->sum(),
-                    'with_pendencies' => (int) ($byStatus[ProcessStatus::PendenciaDistribuidora->value] ?? 0),
-                    'connected' => (int) ($byStatus[ProcessStatus::Conectado->value] ?? 0),
+                    'active' => (int) $byStage->sum(),
+                    'waiting_distributor' => (int) $byStage->only($waiting)->sum(),
+                    'in_correction' => (int) ($byStage[WorkflowStage::Correction->value] ?? 0),
+                    'completed' => HomologationProcess::query()->where('status', ProcessStatus::Completed->value)->count(),
                     'overdue' => $overdue,
                     'open_pendencies' => ProcessPendency::query()->where('status', 'aberta')->count(),
-                    'documents_to_review' => ProcessDocument::query()->where('is_current', true)->where('review_status', 'pendente')->count(),
-                    'connected_power_kwp' => round((float) $connectedPower, 2),
+                    'documents_to_review' => Document::query()->where('review_status', 'pendente')
+                        ->whereHas('links', fn ($q) => $q->where('is_current', true))->count(),
+                    'completed_power_kw' => round((float) $completedPower, 2),
                     'avg_approval_days' => $avgDays !== null ? round((float) $avgDays, 1) : null,
                 ],
-                'by_status' => array_map(fn (ProcessStatus $s) => [
-                    'status' => $s->value,
+                'by_stage' => array_map(fn (WorkflowStage $s) => [
+                    'stage' => $s->value,
                     'label' => $s->label(),
-                    'total' => (int) ($byStatus[$s->value] ?? 0),
-                ], ProcessStatus::cases()),
+                    'total' => (int) ($byStage[$s->value] ?? 0),
+                ], WorkflowStage::cases()),
                 'recent' => $recent,
             ],
         ]);

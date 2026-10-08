@@ -5,6 +5,7 @@ namespace App\Domain\Homologations;
 use App\Domain\Distributors\IntegrationService;
 use App\Domain\Distributors\Models\ExternalPendingItem;
 use App\Domain\Homologations\Enums\ProcessStatus;
+use App\Domain\Homologations\Enums\WorkflowStage;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\ProcessPendency;
 use App\Domain\Shared\Exceptions\DomainException;
@@ -100,6 +101,15 @@ final class ProcessWorkflow
 
         return DB::transaction(function () use ($process, $target, $actor, $reason, $input, $current, $stage): HomologationProcess {
             $process->status = $target;
+            $process->stage = match ($target) {
+                ProcessStatus::Enviado, ProcessStatus::EmAnalise => WorkflowStage::ExternalAnalysis,
+                ProcessStatus::PendenciaDistribuidora => WorkflowStage::Correction,
+                ProcessStatus::Aprovado => WorkflowStage::Execution,
+                ProcessStatus::VistoriaSolicitada => WorkflowStage::Inspection,
+                ProcessStatus::Conectado => WorkflowStage::Connection,
+                default => WorkflowStage::Preparation,
+            };
+            $process->stage_changed_at = now();
             $process->status_changed_at = now();
             $process->current_stage_id = $stage->id;
             $process->completed_at = $target->isTerminal() ? now() : null;
@@ -157,5 +167,21 @@ final class ProcessWorkflow
     {
         $process->protocol_number = trim($protocol);
         $process->submitted_at ??= now();
+    }
+
+    public function resolvePendency(ProcessPendency $pendency, User $user, string $resolution): ProcessPendency
+    {
+        if ($pendency->status === 'resolvida') {
+            throw new DomainException('Esta pendência já foi resolvida.');
+        }
+
+        $pendency->forceFill([
+            'status' => 'resolvida', 'resolution' => $resolution,
+            'resolved_by' => $user->id, 'resolved_at' => now(),
+        ])->save();
+
+        app(TimelineRecorder::class)->record($pendency->process, 'PENDENCY_RESOLVED', "Pendência resolvida: {$pendency->title}", $resolution, null, $user->id);
+
+        return $pendency;
     }
 }

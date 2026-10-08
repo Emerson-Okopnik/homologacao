@@ -10,7 +10,7 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { api } from '@/lib/http'
-import { formatDate, formatNumber, statusTone } from '@/lib/format'
+import { formatDate, formatNumber, stageTone } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
 import type { Paginated, Project } from '@/types/api'
 
@@ -64,20 +64,22 @@ const { data, error, loading } = useApiQuery(source, (s) => api<Paginated<Projec
                 <RouterLink :to="`/projetos/${project.id}`" class="font-mono font-medium hover:text-primary hover:underline">
                   {{ project.code }}
                 </RouterLink>
-                <p class="text-xs text-muted capitalize">{{ project.generation_type }}geração</p>
+                <p class="text-xs text-muted">{{ project.classification_label }}</p>
               </td>
               <td class="px-4 py-3">
                 <p class="font-medium">{{ project.client?.name }}</p>
                 <p class="text-xs text-muted">UC {{ project.consumer_unit?.number }} · {{ project.consumer_unit?.distributor?.name }}</p>
               </td>
               <td class="px-4 py-3 text-right tabular-nums">
-                {{ formatNumber(project.installed_power_kwp, 'kWp') }}
-                <p class="text-xs text-muted">acesso {{ formatNumber(project.access_power_kw, 'kW') }}</p>
+                {{ formatNumber(project.considered_power_kw, 'kW') }}
+                <p class="text-xs text-muted">módulos {{ formatNumber(project.modules_power_kwp, 'kWp') }}</p>
               </td>
-              <td class="px-4 py-3">{{ project.modality_label }}</td>
+              <td class="px-4 py-3">{{ project.compensation_mode_label }}</td>
               <td class="px-4 py-3">
                 <RouterLink v-if="project.process" :to="`/processos/${project.process.id}`" class="hover:opacity-80">
-                  <StatusBadge :tone="statusTone(project.process.status)">{{ project.process.status_label }}</StatusBadge>
+                  <StatusBadge :tone="stageTone(project.process.stage, project.process.status)">
+                    {{ project.process.status === 'ACTIVE' ? project.process.stage_label : project.process.status_label }}
+                  </StatusBadge>
                 </RouterLink>
               </td>
               <td class="px-4 py-3 text-muted tabular-nums">{{ formatDate(project.created_at) }}</td>
