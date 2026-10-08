@@ -1,0 +1,26 @@
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+.vercel/
+
+# Environment variables
+.env*.local
+
+# Homologa Solar
+backend/vendor/
+backend/.env
+backend/.phpunit.cache/
+backend/storage/*.key
+frontend/dist/
+frontend/.pnpm-store/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+
+# Common ignores
+node_modules
+.next/
+.DS_Store
