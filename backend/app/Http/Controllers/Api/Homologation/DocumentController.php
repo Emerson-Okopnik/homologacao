@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Homologation;
 
 use App\Domain\Catalog\Models\EquipmentItem;
 use App\Domain\Documents\DocumentTypes;
+use App\Domain\Documents\DocumentUploader;
 use App\Domain\Documents\Models\Document;
 use App\Domain\Documents\Models\DocumentLink;
 use App\Domain\Homologations\Models\ConnectionEvent;
@@ -43,7 +44,10 @@ final class DocumentController extends Controller
         'process' => HomologationProcess::class,
     ];
 
-    public function __construct(private readonly TimelineRecorder $timeline) {}
+    public function __construct(
+        private readonly TimelineRecorder $timeline,
+        private readonly DocumentUploader $uploader,
+    ) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -106,48 +110,8 @@ final class DocumentController extends Controller
 
         $this->assertCanAttach($type, $owner);
 
-        $file = $request->file('file');
-        $hash = hash_file('sha256', $file->getRealPath());
-
-        $document = DB::transaction(function () use ($type, $owner, $data, $file, $hash, $request): Document {
-            $currentLink = DocumentLink::query()
-                ->where('linkable_type', $type)->where('linkable_id', $owner->getKey())
-                ->where('document_type', $data['document_type'])->where('is_current', true)
-                ->lockForUpdate()->first();
-            $previous = $currentLink?->document;
-
-            if ($previous && $previous->sha256 === $hash) {
-                throw new DomainException('Este arquivo é idêntico à versão atual.', 'document_duplicated');
-            }
-
-            $path = $file->storeAs(
-                'tenants/'.$owner->getAttribute('tenant_id')."/{$type}/".$owner->getAttribute('uuid'),
-                Str::uuid()->toString().'.'.$file->extension(),
-                self::DISK,
-            );
-
-            $document = Document::create([
-                'document_type' => $data['document_type'],
-                'version' => ($previous?->version ?? 0) + 1,
-                'supersedes_document_id' => $previous?->id,
-                'original_name' => Str::limit($file->getClientOriginalName(), 250, ''),
-                'storage_path' => $path,
-                'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
-                'size_bytes' => $file->getSize(),
-                'sha256' => $hash,
-                'review_status' => 'pendente',
-                'uploaded_by' => $request->user()->id,
-            ]);
-
-            $currentLink?->update(['is_current' => false]);
-            DocumentLink::create([
-                'document_id' => $document->id,
-                'linkable_type' => $type,
-                'linkable_id' => $owner->getKey(),
-                'document_type' => $data['document_type'],
-                'is_current' => true,
-                'linked_by' => $request->user()->id,
-            ]);
+        $document = DB::transaction(function () use ($type, $owner, $data, $request): Document {
+            $document = $this->uploader->upload($type, $owner, $data['document_type'], $request->file('file'), $request->user()->id);
 
             if ($process = $this->processOf($type, $owner)) {
                 $this->timeline->record($process, 'DOCUMENT_UPLOADED',

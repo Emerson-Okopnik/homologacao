@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Registry;
 
 use App\Domain\TechnicalResponsibles\Models\TechnicalResponsible;
 use App\Domain\Tenancy\TenantContext;
+use App\Domain\Users\Models\User;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Registry\TechnicalResponsibleResource;
 use Illuminate\Http\JsonResponse;
@@ -58,7 +59,8 @@ final class TechnicalResponsibleController extends Controller
     {
         $request->merge(['state' => strtoupper((string) $request->input('state'))]);
 
-        return $request->validate([
+        $data = $request->validate([
+            'user_id' => ['nullable', 'uuid'],
             'name' => ['required', 'string', 'max:200'],
             'council' => ['required', Rule::in(['CREA', 'CFT'])],
             'registration' => [
@@ -75,5 +77,20 @@ final class TechnicalResponsibleController extends Controller
             'registration_status' => ['required', Rule::in(['regular', 'irregular', 'nao_verificado'])],
             'active' => ['sometimes', 'boolean'],
         ], ['registration.unique' => 'Já existe um responsável com este registro neste conselho/UF.']);
+
+        // O RT é um funcionário: só usuários internos (sem vínculo de cliente) do tenant.
+        if (! empty($data['user_id'])) {
+            $user = User::query()
+                ->where('tenant_id', app(TenantContext::class)->id())
+                ->whereNull('client_id')
+                ->where('uuid', $data['user_id'])
+                ->first();
+            abort_unless($user, 422, 'Usuário inválido para responsável técnico.');
+            $data['user_id'] = $user->id;
+        } else {
+            $data['user_id'] = null;
+        }
+
+        return $data;
     }
 }

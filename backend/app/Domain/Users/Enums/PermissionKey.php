@@ -29,10 +29,12 @@ enum PermissionKey: string
     case RequirementsConfigure = 'requirements.configure';
     case IntegrationsConfigure = 'integrations.configure';
     case DashboardView = 'dashboard.view';
+    case PortalAccess = 'portal.access';
 
     public function label(): string
     {
         return match ($this) {
+            self::PortalAccess => 'Acessar portal do cliente',
             self::UsersView => 'Visualizar usuários',
             self::UsersManage => 'Gerenciar usuários',
             self::RolesView => 'Visualizar perfis',
@@ -77,6 +79,7 @@ enum PermissionKey: string
             'requirements' => 'Requisitos',
             'integrations' => 'Integrações',
             'dashboard' => 'Dashboard',
+            'portal' => 'Portal do cliente',
             default => ucfirst($group),
         };
     }

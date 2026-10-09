@@ -100,6 +100,21 @@ class User extends Authenticatable
         return $this->permissionKeys()->contains($key);
     }
 
+    /**
+     * Cliente ao qual o usuário do portal pertence (null para funcionários).
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\App\Domain\Clients\Models\Client, $this>
+     */
+    public function client(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Domain\Clients\Models\Client::class);
+    }
+
+    public function isPortalUser(): bool
+    {
+        return $this->getAttribute('client_id') !== null;
+    }
+
     public function isSuperAdmin(): bool
     {
         return (bool) $this->getAttribute('is_super_admin');

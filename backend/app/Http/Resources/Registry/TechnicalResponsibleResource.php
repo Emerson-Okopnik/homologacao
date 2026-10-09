@@ -26,6 +26,9 @@ final class TechnicalResponsibleResource extends JsonResource
             'phone' => $this->phone,
             'registration_status' => $this->registration_status,
             'active' => $this->active,
+            'user' => $this->user_id && ($user = \App\Domain\Users\Models\User::query()->find($this->user_id))
+                ? ['id' => $user->uuid, 'name' => $user->name, 'email' => $user->email]
+                : null,
             'projects_count' => $this->whenCounted('projects'),
         ];
     }

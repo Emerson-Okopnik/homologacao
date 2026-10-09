@@ -15,10 +15,13 @@ enum SystemRole: string
     case TechnicalResponsible = 'responsavel_tecnico';
     case Manager = 'gestor';
     case ReadOnly = 'consulta';
+    // Dono do sistema: acessa apenas o portal e os próprios dados.
+    case Client = 'cliente';
 
     public function label(): string
     {
         return match ($this) {
+            self::Client => 'Cliente (portal)',
             self::Administrator => 'Administrador',
             self::Homologator => 'Homologador',
             self::TechnicalResponsible => 'Responsável Técnico',
@@ -35,7 +38,8 @@ enum SystemRole: string
         $read = [P::DashboardView, P::ClientsView, P::ProjectsView, P::DocumentsView, P::HomologationsView];
 
         return match ($this) {
-            self::Administrator => P::cases(),
+            self::Administrator => array_values(array_filter(P::cases(), fn (P $p) => $p !== P::PortalAccess)),
+            self::Client => [P::PortalAccess],
             self::Homologator => [...$read, P::ClientsManage, P::TechnicalResponsiblesManage, P::ProjectsManage,
                 P::DocumentsManage, P::HomologationsManage],
             self::TechnicalResponsible => [...$read, P::ProjectsManage, P::DocumentsManage],

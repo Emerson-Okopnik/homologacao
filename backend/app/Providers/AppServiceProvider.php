@@ -46,6 +46,7 @@ class AppServiceProvider extends ServiceProvider
             'inspection' => Inspection::class,
             'connection_event' => ConnectionEvent::class,
             'process' => HomologationProcess::class,
+            'client_request' => \App\Domain\Projects\Models\ClientRequest::class,
         ]);
     }
 }
