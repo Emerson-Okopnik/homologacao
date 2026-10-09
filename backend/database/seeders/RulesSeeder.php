@@ -60,7 +60,7 @@ class RulesSeeder extends Seeder
             }
         }
 
-        $model::query()->updateOrCreate(
+        $model::query()->firstOrCreate(
             ['rule_code' => $attributes['rule_code'], 'version' => 1],
             [
                 'distributor_code' => null,

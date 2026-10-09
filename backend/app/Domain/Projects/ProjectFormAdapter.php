@@ -89,9 +89,9 @@ final class ProjectFormAdapter
                 $project->responsibilities()->create(['purpose' => $purpose, 'technical_responsible_id' => $rt->id, 'art_number' => $data[$field]['art_number'] ?? null, 'created_by' => $request->user()->id]);
             }
         }
-        $allocation = isset($data['compensation_method']) ? strtolower($data['compensation_method']) : ($project->compensation?->allocation_rule ?? 'percentage');
+        $allocation = isset($data['compensation_method']) ? strtolower($data['compensation_method']) : ($project->compensation->allocation_rule ?? 'percentage');
         $config = CompensationConfig::updateOrCreate(['solar_project_id' => $project->id], ['mode' => $project->modality, 'allocation_rule' => $allocation]);
-        $project->update(['compensation_method'=>strtoupper($allocation)]);
+        $project->update(['compensation_method' => strtoupper($allocation)]);
         if (array_key_exists('compensation_units', $data)) {
             $config->units()->delete();
         }

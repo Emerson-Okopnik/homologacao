@@ -5,6 +5,7 @@ namespace App\Domain\Projects;
 use App\Domain\Catalog\Models\EquipmentItem;
 use App\Domain\ConsumerUnits\Models\ConsumerUnit;
 use App\Domain\Homologations\Models\ChecklistItem;
+use App\Domain\Projects\Enums\CompensationMode;
 use App\Domain\Projects\Models\CompensationConfig;
 use App\Domain\Projects\Models\CompensationUnit;
 use App\Domain\Projects\Models\ProjectConnectionData;
@@ -128,7 +129,7 @@ final class ProjectTechnicalData
             $project->inverter_power_kw = number_format($project->inverters->sum(fn ($inverter) => $inverter->totalAcPower()), 3, '.', '');
             $project->generation_type = SolarProject::classify($project->accessPowerKw());
             $project->has_battery = $project->storage->isNotEmpty();
-            $project->compensation_mode = array_search($project->modality, ProjectFormAdapter::MODES, true);
+            $project->compensation_mode = CompensationMode::from((string) array_search($project->modality, ProjectFormAdapter::MODES, true));
             $project->compensation_method = strtoupper($project->compensation->allocation_rule);
             $project->considered_power_kw = (string) $project->accessPowerKw();
             $project->storage_energy_kwh = (string) $project->storage->sum(fn ($row) => (float) $row->energy_kwh * $row->quantity);
