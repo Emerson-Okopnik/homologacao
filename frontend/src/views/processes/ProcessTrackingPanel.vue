@@ -92,7 +92,6 @@ async function download(submission: Submission) {
             <p class="mt-1 text-muted">
               {{ s.change_reason }}<template v-if="s.external_receipt"> · comprovante {{ s.external_receipt }}</template>
             </p>
-            <p class="mt-1 break-all text-xs text-muted">SHA-256 do envio: {{ s.request_hash }}</p>
             <div class="mt-3 flex flex-wrap items-center gap-2">
               <a
                 :href="buildUrl(`/processes/${process.id}/submissions/${s.id}/dossier`)"
@@ -100,7 +99,6 @@ async function download(submission: Submission) {
                 rel="noopener"
                 class="text-primary hover:underline"
                 >Baixar dossiê (ZIP)</a
-              ><BaseButton variant="secondary" @click="download(s)">Baixar manifesto</BaseButton
               ><BaseButton v-if="canManage && s.status !== 'sent'" @click="dialog = { action: 'confirm', submission: s }">{{
                 s.status === 'failed' ? 'Confirmar nova tentativa' : 'Confirmar envio'
               }}</BaseButton
@@ -108,6 +106,11 @@ async function download(submission: Submission) {
                 >Registrar falha</BaseButton
               >
             </div>
+            <details class="mt-3 text-xs text-muted">
+              <summary class="cursor-pointer">Dados técnicos do envio</summary>
+              <p class="my-3 break-all">SHA-256 do envio: {{ s.request_hash }}</p>
+              <BaseButton variant="secondary" @click="download(s)">Baixar manifesto</BaseButton>
+            </details>
           </li>
         </ul>
         <RouterLink
@@ -117,13 +120,17 @@ async function download(submission: Submission) {
           >Dados técnicos e versões do projeto</RouterLink
         >
       </section>
-      <ProjectDocumentsPanel
-        :endpoint="`/processes/${process.id}/documents`"
-        :documents="data.documents"
-        :editable="!['conectado', 'cancelado'].includes(process.status)"
-        @saved="saved"
-      />
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      <details class="rounded-2xl border border-line bg-surface p-5">
+        <summary class="cursor-pointer font-semibold">Comprovantes e anexos do acompanhamento</summary>
+        <p class="my-3 text-sm text-muted">Envie e revise comprovantes, respostas às exigências e relatórios utilizados no acompanhamento.</p>
+        <ProjectDocumentsPanel
+          :endpoint="`/processes/${process.id}/documents`"
+          :documents="data.documents"
+          :editable="!['conectado', 'cancelado'].includes(process.status)"
+          @saved="saved"
+        />
+      </details>
+      <section v-if="data.pending_items.length || ['enviado', 'em_analise', 'pendencia_distribuidora', 'vistoria_solicitada'].includes(process.status)" class="rounded-2xl border border-line bg-surface p-5">
         <header class="mb-3 flex justify-between">
           <h2 class="font-semibold">Exigências da distribuidora</h2>
           <BaseButton
@@ -149,9 +156,9 @@ async function download(submission: Submission) {
           </li>
         </ul>
       </section>
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      <details class="rounded-2xl border border-line bg-surface p-5">
+        <summary class="cursor-pointer font-semibold">Orçamento de conexão<span v-if="data.budgets.length"> · {{ data.budgets.length }} registro(s)</span></summary>
         <header class="mb-3 flex justify-between">
-          <h2 class="font-semibold">Orçamento de conexão</h2>
           <BaseButton v-if="canManage" variant="secondary" @click="dialog = { action: 'budget' }">Registrar orçamento</BaseButton>
         </header>
         <p v-if="!data.budgets.length" class="text-sm text-muted">Nenhum orçamento registrado.</p>
@@ -161,8 +168,8 @@ async function download(submission: Submission) {
             }}<template v-if="b.expires_at"> · validade {{ b.expires_at }}</template>
           </li>
         </ul>
-      </section>
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      </details>
+      <section v-if="data.inspections.length || ['aprovado', 'vistoria_solicitada', 'conectado'].includes(process.status)" class="rounded-2xl border border-line bg-surface p-5">
         <header class="mb-3 flex justify-between">
           <h2 class="font-semibold">Vistorias e conexão</h2>
           <BaseButton
@@ -189,20 +196,23 @@ async function download(submission: Submission) {
           </li>
         </ul>
       </section>
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      <details class="rounded-2xl border border-line bg-surface p-5">
+        <summary class="cursor-pointer font-semibold">Gestão do processo e atribuições</summary>
         <header class="mb-3 flex justify-between">
-          <h2 class="font-semibold">Responsáveis e etapas</h2>
           <BaseButton v-if="canManage" variant="ghost" @click="dialog = { action: 'assignment' }">Responsável e prioridade</BaseButton>
         </header>
         <ul class="mb-4 text-sm">
           <li v-for="a in data.assignments" :key="a.id">{{ a.name }} · {{ a.role }} · {{ a.active ? 'Atual' : 'Anterior' }}</li>
         </ul>
-        <ol class="space-y-2 text-sm">
-          <li v-for="(h, index) in data.stage_history" :key="index">
-            {{ h.stage }} · {{ formatDateTime(h.entered_at) }} · {{ h.actor ?? 'Registro anterior' }}
-          </li>
-        </ol>
-      </section>
+        <details v-if="data.stage_history.length">
+          <summary class="cursor-pointer text-sm text-muted">Histórico das atribuições de etapas</summary>
+          <ol class="mt-3 space-y-2 text-sm">
+            <li v-for="(h, index) in data.stage_history" :key="index">
+              {{ h.stage }} · {{ formatDateTime(h.entered_at) }} · {{ h.actor ?? 'Registro anterior' }}
+            </li>
+          </ol>
+        </details>
+      </details>
       <details class="rounded-2xl border border-line bg-surface p-5">
         <summary class="cursor-pointer font-semibold">Histórico dos envios e retornos</summary>
         <ul class="mt-4 space-y-3 text-sm">

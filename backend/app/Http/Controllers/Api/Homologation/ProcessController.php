@@ -36,6 +36,7 @@ final class ProcessController extends Controller
 
         $filters = $request->validate([
             'status' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'scope' => ['sometimes', Rule::in(['active', 'closed', 'all'])],
             'distributor' => ['sometimes', 'nullable', 'uuid'],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'board' => ['sometimes', 'boolean'],
@@ -43,8 +44,10 @@ final class ProcessController extends Controller
         ]);
 
         $query = HomologationProcess::query()
-            ->with(['distributor', 'assignee', 'project.client', 'project.consumerUnit', 'currentStage'])
+            ->with(['distributor', 'assignee', 'project.client', 'project.consumerUnit', 'currentStage', 'deadlines'])
             ->withCount('openPendencies')
+            ->when(($filters['scope'] ?? 'all') === 'active', fn ($q) => $q->whereNotIn('status', [ProcessStatus::Conectado->value, ProcessStatus::Cancelado->value]))
+            ->when(($filters['scope'] ?? 'all') === 'closed', fn ($q) => $q->whereIn('status', [ProcessStatus::Conectado->value, ProcessStatus::Cancelado->value]))
             ->when($filters['status'] ?? null, fn ($q, string $s) => $q->whereHas('currentStage', fn ($stage) => $stage->where('code', $s)))
             ->when($filters['distributor'] ?? null, fn ($q, string $uuid) => $q->whereHas('distributor', fn ($d) => $d->where('uuid', $uuid)))
             ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where(fn ($w) => $w
@@ -54,8 +57,8 @@ final class ProcessController extends Controller
                 ->orWhereHas('project.consumerUnit', fn ($u) => $u->where('number', 'like', "%{$s}%"))));
 
         if ($request->boolean('board')) {
-            $query->whereNotIn('status', [ProcessStatus::Cancelado->value, ProcessStatus::Reprovado->value])
-                ->orderBy('status_changed_at');
+            $query->whereNotIn('status', [ProcessStatus::Conectado->value, ProcessStatus::Cancelado->value])
+                ->orderBy('stage_changed_at');
 
             return ProcessResource::collection($query->limit(500)->get());
         }
@@ -182,7 +185,7 @@ final class ProcessController extends Controller
     }
 
     /**
-     * Metadados para a UI montar colunas e transições sem duplicar regras.
+     * Metadados para a UI listar situações e transições sem duplicar regras.
      */
     public function statuses(): JsonResponse
     {

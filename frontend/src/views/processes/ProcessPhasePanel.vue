@@ -8,11 +8,11 @@ import ProcessActionDialog from './ProcessActionDialog.vue'
 import DocumentUploadDialog from '@/views/documents/DocumentUploadDialog.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api } from '@/lib/http'
-import { formatDate, formatDateTime } from '@/lib/format'
+import { formatDate } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
 import type { HomologationProcess, ProcessActionKey, StageCatalog, ChecklistItem } from '@/types/api'
 
-const props = defineProps<{ process: HomologationProcess }>()
+const props = defineProps<{ process: HomologationProcess; mode: 'requirements' | 'actions' }>()
 const emit = defineEmits<{ saved: [] }>()
 const auth = useAuthStore()
 const action = ref<ProcessActionKey | null>(null)
@@ -45,18 +45,18 @@ function saved() { action.value = null; uploading.value = null; emit('saved') }
 <template>
   <section class="mt-6 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-phase">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 id="sec-phase" class="font-semibold">Requisitos e acompanhamento da fase</h2>
+      <h2 id="sec-phase" class="font-semibold">{{ mode === 'requirements' ? 'Requisitos da fase' : 'Execução, vistoria e conexão' }}</h2>
       <StatusBadge>{{ process.stage_label }}</StatusBadge>
     </div>
-    <p class="mt-2 text-sm text-muted">Obra de rede: {{ process.network_work_label }}</p>
-    <p v-if="process.open_deadline" class="mt-1 text-sm" :class="process.open_deadline.overdue ? 'text-danger' : 'text-muted'">
+    <p v-if="mode === 'actions' && !['PREPARATION', 'CORRECTION'].includes(process.stage)" class="mt-2 text-sm text-muted">Obra de rede: {{ process.network_work_label }}</p>
+    <p v-if="mode === 'actions' && process.open_deadline" class="mt-1 text-sm" :class="process.open_deadline.overdue ? 'text-danger' : 'text-muted'">
       {{ process.open_deadline.label }} · prazo {{ formatDate(process.open_deadline.due_at) }}
     </p>
-    <p v-if="process.execution" class="mt-1 text-sm text-muted">Instalação concluída em {{ formatDate(process.execution.completed_at) }}</p>
-    <div v-if="auth.can('homologations.manage')" class="mt-4 flex flex-wrap gap-2">
+    <p v-if="mode === 'actions' && process.execution" class="mt-1 text-sm text-muted">Instalação concluída em {{ formatDate(process.execution.completed_at) }}</p>
+    <div v-if="mode === 'actions' && auth.can('homologations.manage')" class="mt-4 flex flex-wrap gap-2">
       <BaseButton v-for="item in actions" :key="item.key" variant="secondary" @click="action = item.key">{{ item.label }}</BaseButton>
     </div>
-    <template v-if="process.phase_checklist?.items.length">
+    <template v-if="mode === 'requirements' && process.phase_checklist?.items.length">
       <p class="mt-5 text-sm font-medium">{{ process.phase_checklist.label }} · {{ process.phase_checklist.satisfied }}/{{ process.phase_checklist.total }} requisitos atendidos</p>
       <SelectField v-if="process.phase_checklist.items.some(i => i.document_owner === 'equipment')" v-model="equipment" class="mt-3 max-w-sm" label="Equipamento para os anexos do catálogo" :options="equipmentOptions" />
       <ul class="mt-3 divide-y divide-line">
@@ -71,13 +71,6 @@ function saved() { action.value = null; uploading.value = null; emit('saved') }
       </ul>
       <RouterLink to="/documentos" class="mt-2 inline-block text-sm text-primary">Revisar os documentos enviados</RouterLink>
     </template>
-    <ul v-if="process.timeline?.length" class="mt-5 space-y-3 border-t border-line pt-4">
-      <li v-for="(event, index) in process.timeline" :key="index" class="text-sm">
-        <p class="font-medium">{{ event.title }}</p>
-        <p class="text-xs text-muted">{{ formatDateTime(event.occurred_at) }} · {{ event.user ?? 'Sistema' }}</p>
-        <p v-if="event.description" class="whitespace-pre-line text-xs text-muted">{{ event.description }}</p>
-      </li>
-    </ul>
     <ProcessActionDialog v-if="action" :process="process" :action="action" :catalog="catalog" @close="action = null" @saved="saved" />
     <DocumentUploadDialog v-if="uploading" endpoint="/documents" :initial-type="uploading.type" :owner="uploading.owner" @close="uploading = null" @saved="saved" />
   </section>
