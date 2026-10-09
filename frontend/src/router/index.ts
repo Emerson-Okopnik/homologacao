@@ -9,6 +9,7 @@ declare module 'vue-router' {
     guestOnly?: boolean
     permission?: PermissionKey
     superAdmin?: boolean
+    portal?: boolean
     title?: string
   }
 }
@@ -37,9 +38,52 @@ export const router = createRouter({
       meta: { public: true, guestOnly: true, title: 'Redefinir senha' },
     },
     {
+      path: '/portal',
+      component: () => import('@/layouts/PortalLayout.vue'),
+      meta: { portal: true },
+      children: [
+        {
+          path: '',
+          name: 'portal-home',
+          component: () => import('@/views/portal/PortalHomeView.vue'),
+          meta: { portal: true, title: 'Minhas solicitações' },
+        },
+        {
+          path: 'solicitacoes/nova',
+          name: 'portal-request-new',
+          component: () => import('@/views/portal/PortalRequestFormView.vue'),
+          meta: { portal: true, title: 'Nova solicitação' },
+        },
+        {
+          path: 'solicitacoes/:id/editar',
+          name: 'portal-request-edit',
+          component: () => import('@/views/portal/PortalRequestFormView.vue'),
+          meta: { portal: true, title: 'Editar solicitação' },
+        },
+        {
+          path: 'solicitacoes/:id',
+          name: 'portal-request',
+          component: () => import('@/views/portal/PortalRequestDetailView.vue'),
+          meta: { portal: true, title: 'Solicitação' },
+        },
+      ],
+    },
+    {
       path: '/',
       component: AppLayout,
       children: [
+        {
+          path: 'solicitacoes',
+          name: 'client-requests',
+          component: () => import('@/views/requests/ClientRequestsView.vue'),
+          meta: { permission: 'projects.view', title: 'Solicitações de clientes' },
+        },
+        {
+          path: 'solicitacoes/:id',
+          name: 'client-request-detail',
+          component: () => import('@/views/requests/ClientRequestDetailView.vue'),
+          meta: { permission: 'projects.view', title: 'Solicitação' },
+        },
         {
           path: '',
           name: 'dashboard',
@@ -158,12 +202,19 @@ router.beforeEach(async (to) => {
   await auth.ensureLoaded()
 
   if (to.meta.public) {
-    return to.meta.guestOnly && auth.status === 'authenticated' ? { name: 'dashboard' } : true
+    if (to.meta.guestOnly && auth.status === 'authenticated') {
+      return auth.isClient ? { name: 'portal-home' } : { name: 'dashboard' }
+    }
+    return true
   }
 
   if (auth.status !== 'authenticated') {
     return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} }
   }
+
+  // Cliente (titular) só navega no portal; a equipe não usa o portal.
+  if (auth.isClient && !to.meta.portal) return { name: 'portal-home' }
+  if (!auth.isClient && to.meta.portal) return { name: 'dashboard' }
 
   if (to.meta.superAdmin && !auth.isSuperAdmin) {
     return { name: 'forbidden' }

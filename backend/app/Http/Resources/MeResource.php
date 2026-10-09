@@ -26,6 +26,9 @@ final class MeResource extends JsonResource
             'tenant' => $tenant ? ['id' => $tenant->uuid, 'name' => $tenant->name, 'slug' => $tenant->slug] : null,
             'permissions' => $this->permissionKeys()->all(),
             'is_super_admin' => $this->isSuperAdmin(),
+            'client' => $this->resource->isPortalUser() && ($client = $this->resource->client()->first())
+                ? ['id' => $client->uuid, 'name' => $client->name]
+                : null,
         ];
     }
 }

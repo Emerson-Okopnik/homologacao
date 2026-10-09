@@ -85,13 +85,47 @@ final class ProjectController extends Controller
 
         app(ProjectFormAdapter::class)->normalize($request);
         $data = $this->validated($request);
+        $clientRequest = $this->clientRequestToConvert($request, $data);
 
-        $project = DB::transaction(function () use ($data, $request): SolarProject {
+        $project = DB::transaction(function () use ($data, $request, $clientRequest): SolarProject {
             $project = SolarProject::create([
                 ...$data['attributes'],
                 'code' => SequentialCode::next(SolarProject::class, 'PRJ'),
                 'created_by' => $request->user()->id,
             ]);
+
+            $this->syncRelations($project, $data, $request->user()->id);
+
+            $assignedUserId = $clientRequest?->technicalResponsible?->user_id ?? $request->user()->id;
+
+            $process = HomologationProcess::create([
+                'solar_project_id' => $project->id,
+                'distributor_id' => $data['unit']->distributor_id,
+                'assigned_user_id' => $assignedUserId,
+                'code' => SequentialCode::next(HomologationProcess::class, 'HOM'),
+            ]);
+            $process->forceFill([
+                'status' => ProcessStatus::Active,
+                'stage' => WorkflowStage::Preparation,
+                'stage_changed_at' => now(),
+            ])->save();
+
+            $this->evaluator->evaluate($project);
+            $this->timeline->record($process, 'CREATED', 'Processo aberto', 'Projeto cadastrado e em preparação.');
+
+            if ($clientRequest) {
+                $copied = app(\App\Domain\Documents\DocumentUploader::class)
+                    ->copyCurrentLinks('client_request', $clientRequest, 'project', $project, $request->user()->id);
+                $clientRequest->forceFill([
+                    'status' => \App\Domain\Projects\Enums\ClientRequestStatus::Converted,
+                    'solar_project_id' => $project->id,
+                    'converted_at' => now(),
+                ]);
+                $clientRequest->addMessage('system', 'Sistema', "Solicitação convertida no projeto {$project->code}.");
+                $clientRequest->save();
+                $this->timeline->record($process, 'CLIENT_REQUEST_CONVERTED',
+                    "Originado da solicitação {$clientRequest->code}", "{$copied} documento(s) do cliente reaproveitado(s).");
+            }
             $this->syncEquipment($project, $data['equipment']);
             app(ProjectFormAdapter::class)->persist($request, $project);
 
@@ -343,6 +377,189 @@ final class ProjectController extends Controller
 
     private function assertEditable(SolarProject $project): void
     {
+        $process = $project->process;
+        if ($process && (! $process->isActive() || ! $process->stage->allowsProjectEdit())) {
+            throw new DomainException(
+                "O projeto não pode ser alterado na etapa \"{$process->stage->label()}\". Use a versão congelada como referência.",
+                'project_locked',
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function syncRelations(SolarProject $project, array $data, int $userId): void
+    {
+        $project->equipment()->sync(collect($data['equipment'])->mapWithKeys(fn ($e) => [
+            $e['id'] => ['quantity' => $e['quantity'], 'tenant_id' => $project->tenant_id],
+        ])->all());
+
+        $project->responsibilities()->delete();
+        foreach ($data['responsibilities'] as $purpose => $resp) {
+            $project->responsibilities()->create([
+                'technical_responsible_id' => $resp['id'],
+                'purpose' => $purpose,
+                'art_number' => $resp['art_number'],
+                'created_by' => $userId,
+            ]);
+        }
+
+        $project->compensationUnits()->delete();
+        foreach ($data['compensation_units'] as $unit) {
+            $project->compensationUnits()->create($unit);
+        }
+
+        if ($data['initial_protocol'] !== null) {
+            $request = $project->serviceRequest ?? new ServiceRequest;
+            $request->fill([
+                'consumer_unit_id' => $data['unit']->id,
+                'distributor_id' => $data['unit']->distributor_id,
+                'protocol_number' => $data['initial_protocol'],
+                'opened_at' => $request->opened_at ?? now(),
+                'created_by' => $request->created_by ?? $userId,
+            ])->save();
+            $project->forceFill(['service_request_id' => $request->id])->save();
+        } elseif ($project->service_request_id) {
+            $project->forceFill(['service_request_id' => null])->save();
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function clientRequestToConvert(Request $request, array $data): ?\App\Domain\Projects\Models\ClientRequest
+    {
+        $uuid = $request->validate(['client_request_id' => ['sometimes', 'nullable', 'uuid']])['client_request_id'] ?? null;
+        if (! $uuid) {
+            return null;
+        }
+
+        $clientRequest = \App\Domain\Projects\Models\ClientRequest::query()->with('technicalResponsible')->where('uuid', $uuid)->firstOrFail();
+        if (! $clientRequest->status->isOpen()) {
+            throw new DomainException('Esta solicitação já foi encerrada.', 'request_closed');
+        }
+        if ($clientRequest->consumer_unit_id !== $data['unit']->id) {
+            throw new DomainException('A UC do projeto deve ser a mesma da solicitação do cliente.', 'request_unit_mismatch');
+        }
+
+        return $clientRequest;
+    }
+
+    private function validated(Request $request): array
+    {
+        $data = $request->validate([
+            'client_id' => ['required', 'uuid'],
+            'consumer_unit_id' => ['required', 'uuid'],
+            'initial_protocol' => ['nullable', 'string', 'max:60'],
+            'source_type' => ['sometimes', Rule::in(['SOLAR'])],
+            'has_battery' => ['sometimes', 'boolean'],
+            'storage_energy_kwh' => ['nullable', 'required_if:has_battery,true', 'numeric', 'min:0', 'max:100000'],
+            'has_dispatch_controller' => ['sometimes', 'boolean'],
+            'declared_dispatchable' => ['sometimes', 'boolean'],
+            'has_coupling_transformer' => ['sometimes', 'boolean'],
+            'estimated_generation_kwh_month' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
+            'compensation_mode' => ['required', Rule::enum(CompensationMode::class)],
+            'compensation_method' => ['nullable', Rule::in(['PERCENTAGE', 'PRIORITY'])],
+            'compensation_units' => ['array', 'max:50'],
+            'compensation_units.*.consumer_unit_id' => ['required', 'uuid', 'distinct'],
+            'compensation_units.*.percentage' => ['nullable', 'numeric', 'gt:0', 'max:100'],
+            'compensation_units.*.priority' => ['nullable', 'integer', 'min:1', 'max:999'],
+            'project_rt' => ['nullable', 'array'],
+            'project_rt.id' => ['required_with:project_rt', 'uuid'],
+            'project_rt.art_number' => ['nullable', 'string', 'max:40'],
+            'execution_rt' => ['nullable', 'array'],
+            'execution_rt.id' => ['required_with:execution_rt', 'uuid'],
+            'execution_rt.art_number' => ['nullable', 'string', 'max:40'],
+            'notes' => ['nullable', 'string', 'max:5000'],
+            'equipment' => ['array', 'max:30'],
+            'equipment.*.id' => ['required', 'uuid', 'distinct'],
+            'equipment.*.quantity' => ['required', 'integer', 'min:1', 'max:100000'],
+        ]);
+
+        $client = Client::query()->where('uuid', $data['client_id'])->firstOrFail();
+        $unit = ConsumerUnit::query()->where('uuid', $data['consumer_unit_id'])->firstOrFail();
+
+        if ($unit->client_id !== $client->id) {
+            throw new DomainException('A unidade consumidora não pertence ao cliente informado.', 'unit_client_mismatch');
+        }
+        if (! $unit->active) {
+            throw new DomainException('A unidade consumidora está inativa.', 'unit_inactive');
+        }
+
+        $equipmentIds = EquipmentItem::query()
+            ->whereIn('uuid', collect($data['equipment'] ?? [])->pluck('id'))
+            ->where('active', true)
+            ->pluck('id', 'uuid');
+
+        $equipment = collect($data['equipment'] ?? [])->map(function ($e) use ($equipmentIds) {
+            if (! $equipmentIds->has($e['id'])) {
+                throw new DomainException('Equipamento inválido ou inativo no catálogo.', 'equipment_invalid');
+            }
+
+            return ['id' => (int) $equipmentIds->get($e['id']), 'quantity' => (int) $e['quantity']];
+        })->values()->all();
+
+        $responsibilities = [];
+        foreach ([ResponsibilityPurpose::Project->value => 'project_rt', ResponsibilityPurpose::Execution->value => 'execution_rt'] as $purpose => $key) {
+            if (empty($data[$key]['id'])) {
+                continue;
+            }
+            $rt = TechnicalResponsible::query()->where('uuid', $data[$key]['id'])->where('active', true)->first();
+            if (! $rt) {
+                throw new DomainException('Responsável técnico inválido ou inativo.', 'responsible_invalid');
+            }
+            $responsibilities[$purpose] = ['id' => $rt->id, 'art_number' => $data[$key]['art_number'] ?? null];
+        }
+
+        $mode = CompensationMode::from($data['compensation_mode']);
+        $units = [];
+        if ($mode->allowsAllocation()) {
+            $unitIds = ConsumerUnit::query()->whereIn('uuid', collect($data['compensation_units'] ?? [])->pluck('consumer_unit_id'))->pluck('id', 'uuid');
+            foreach ($data['compensation_units'] ?? [] as $u) {
+                if (! $unitIds->has($u['consumer_unit_id'])) {
+                    throw new DomainException('Unidade beneficiária inválida.', 'compensation_unit_invalid');
+                }
+                $units[] = [
+                    'consumer_unit_id' => (int) $unitIds->get($u['consumer_unit_id']),
+                    'percentage' => $u['percentage'] ?? null,
+                    'priority' => $u['priority'] ?? null,
+                ];
+            }
+            if (($data['compensation_method'] ?? null) === 'PERCENTAGE' && $units !== []) {
+                $sum = round(array_sum(array_map(fn ($u) => (float) $u['percentage'], $units)), 2);
+                if ($sum > 100) {
+                    throw new DomainException("A soma dos percentuais de rateio ({$sum}%) passa de 100%.", 'allocation_over_100');
+                }
+            }
+        }
+
+        $hasBattery = (bool) ($data['has_battery'] ?? false);
+
+        return [
+            'unit' => $unit,
+            'initial_protocol' => filled($data['initial_protocol'] ?? null) ? trim($data['initial_protocol']) : null,
+            'equipment' => $equipment,
+            'responsibilities' => $responsibilities,
+            'compensation_units' => $units,
+            'attributes' => [
+                'client_id' => $client->id,
+                'consumer_unit_id' => $unit->id,
+                'source_type' => $data['source_type'] ?? 'SOLAR',
+                'has_battery' => $hasBattery,
+                'storage_energy_kwh' => $hasBattery ? ($data['storage_energy_kwh'] ?? null) : null,
+                'has_dispatch_controller' => (bool) ($data['has_dispatch_controller'] ?? false),
+                'declared_dispatchable' => (bool) ($data['declared_dispatchable'] ?? false),
+                'has_coupling_transformer' => (bool) ($data['has_coupling_transformer'] ?? false),
+                'estimated_generation_kwh_month' => $data['estimated_generation_kwh_month'] ?? null,
+                'compensation_mode' => $mode,
+                'compensation_method' => $mode->allowsAllocation() ? ($data['compensation_method'] ?? null) : null,
+                'notes' => $data['notes'] ?? null,
+            ],
+        ];
         $project->assertEditable();
     }
 }

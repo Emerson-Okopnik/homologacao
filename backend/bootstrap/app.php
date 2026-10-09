@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant' => ResolveTenant::class,
             'super_admin' => EnsureSuperAdmin::class,
+            'client_portal' => \App\Http\Middleware\EnsureClientPortal::class,
         ]);
         // O tenant precisa estar resolvido antes do route model binding; caso contrário o
         // TenantScope (fail-closed) faria todo binding retornar 404.

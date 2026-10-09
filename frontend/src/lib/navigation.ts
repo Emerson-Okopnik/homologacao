@@ -3,6 +3,7 @@ import {
   ClipboardCheck,
   FileText,
   FolderKanban,
+  Inbox,
   LayoutDashboard,
   ScrollText,
   Settings,
@@ -34,6 +35,7 @@ export const navigation: NavSection[] = [
     title: 'Operação',
     items: [
       { label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view', to: '/' },
+      { label: 'Solicitações', icon: Inbox, permission: 'projects.view', to: '/solicitacoes' },
       { label: 'Kanban', icon: SquareKanban, permission: 'homologations.view', to: '/kanban' },
       { label: 'Homologações', icon: ClipboardCheck, permission: 'homologations.view', to: '/processos' },
       { label: 'Projetos', icon: FolderKanban, permission: 'projects.view', to: '/projetos' },

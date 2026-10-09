@@ -16,7 +16,7 @@ import { useApiQuery } from '@/composables/useApiQuery'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import { formatNumber } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
-import type { Client, CompensationMode, ConsumerUnit, Distributor, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
+import type { Client, ClientRequest, CompensationMode, ConsumerUnit, Distributor, Equipment, Paginated, Project, TechnicalResponsible } from '@/types/api'
 
 const MICRO_LIMIT_KW = 75
 const TYPE_LABEL: Record<Equipment['type'], string> = { module: 'Módulo', inverter: 'Inversor', battery: 'Bateria' }
@@ -71,8 +71,50 @@ const form = reactive({
 })
 const items = ref<Array<{ id: string; quantity: string }>>([])
 const units = shallowRef<ConsumerUnit[]>([])
+
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
+
+// Conversão de uma solicitação aberta pelo cliente.
+const sourceRequestId = typeof route.query.solicitacao === 'string' ? route.query.solicitacao : null
+const sourceRequest = shallowRef<ClientRequest | null>(null)
+if (sourceRequestId) {
+  api<{ data: ClientRequest }>(`/client-requests/${sourceRequestId}`).then((res) => {
+    const r = res.data
+    sourceRequest.value = r
+    if (r.client && !createdClients.value.some((c) => c.id === r.client!.id)) createdClients.value.push(r.client as unknown as Client)
+    Object.assign(form, {
+      client_id: r.client?.id ?? '',
+      consumer_unit_id: r.consumer_unit?.id ?? '',
+      project_rt_id: r.technical_responsible?.id ?? '',
+      execution_rt_id: r.technical_responsible?.id ?? '',
+      compensation_mode: r.system.compensation_mode as CompensationMode,
+      has_battery: r.system.has_battery,
+      storage_energy_kwh: r.system.storage_energy_kwh?.toString() ?? '',
+      notes: r.system.notes ?? '',
+    })
+    if (r.consumer_unit) units.value = uniqueById([r.consumer_unit, ...units.value])
+  }).catch((e) => {
+    error.value = toApiError(e)
+  })
+}
+
+// Pré-seleciona equipamentos do catálogo que batem com o declarado pelo cliente (após catálogo carregar).
+watch(
+  () => [sourceRequest.value, lookups.value] as const,
+  ([r, l]) => {
+    if (!r || !l || items.value.length) return
+    const match = (brand: string, model: string) =>
+      allEquipment.value.find(
+        (e) => e.manufacturer.toLowerCase() === brand.trim().toLowerCase() && e.model.toLowerCase() === model.trim().toLowerCase(),
+      )
+    const declared = [
+      ...r.system.modules.map((m) => ({ eq: match(m.brand, m.model), quantity: m.quantity })),
+      ...r.system.inverters.map((i) => ({ eq: match(i.brand, i.model), quantity: i.quantity })),
+    ]
+    items.value = declared.filter((d) => d.eq).map((d) => ({ id: d.eq!.id, quantity: String(d.quantity ?? 1) }))
+  },
+)
 
 const clientDialog = ref(false)
 const unitDialog = ref(false)
@@ -242,6 +284,7 @@ async function submit() {
     project_rt: form.project_rt_id ? { id: form.project_rt_id, art_number: form.project_art || null } : null,
     execution_rt: form.execution_rt_id ? { id: form.execution_rt_id, art_number: form.execution_art || null } : null,
     equipment: items.value.filter((i) => i.id).map((i) => ({ id: i.id, quantity: Number(i.quantity) })),
+    ...(sourceRequestId && !projectId.value ? { client_request_id: sourceRequestId } : {}),
   }
   try {
     const result = projectId.value
@@ -274,6 +317,22 @@ async function submit() {
     <form v-else class="flex flex-col gap-6" novalidate @submit.prevent="submit">
       <InlineAlert v-if="error && Object.keys(error.errors).length === 0" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
       <InlineAlert v-else-if="error">Revise os campos destacados.</InlineAlert>
+
+      <section
+        v-if="sourceRequest"
+        class="flex flex-col gap-2 rounded-2xl border border-primary/30 bg-primary-soft p-4 text-sm"
+        aria-label="Solicitação de origem"
+      >
+        <p class="font-semibold text-ink">Convertendo a solicitação {{ sourceRequest.code }} de {{ sourceRequest.client?.name }}</p>
+        <p class="text-muted">
+          Titular, UC e modalidade já foram preenchidos. Confira os equipamentos declarados pelo cliente e selecione os itens do catálogo
+          (os que já existem foram pré-selecionados). Os documentos enviados pelo cliente serão reaproveitados no processo.
+        </p>
+        <ul class="flex flex-col gap-0.5 text-ink">
+          <li v-for="(m, i) in sourceRequest.system.modules" :key="`m${i}`">Módulo: {{ m.quantity }}× {{ m.brand }} {{ m.model }} ({{ m.power_w }} W)</li>
+          <li v-for="(inv, i) in sourceRequest.system.inverters" :key="`i${i}`">Inversor: {{ inv.quantity }}× {{ inv.brand }} {{ inv.model }} ({{ inv.power_kw }} kW)</li>
+        </ul>
+      </section>
 
       <p v-if="notice" class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-ink" role="status">{{ notice }}</p>
 

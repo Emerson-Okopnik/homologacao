@@ -81,6 +81,7 @@ final class RequirementEngine
                 'document_type' => $rule->document_type,
                 'document_label' => $rule->document_type ? DocumentTypes::label($rule->document_type) : null,
                 'document_owner' => $rule->document_type ? DocumentTypes::owner($rule->document_type) : null,
+                'party' => DocumentTypes::party($rule->document_type),
                 'outcome' => $rule->outcome,
                 'reason' => $rule->reason,
                 'source_reference' => $rule->source_reference,

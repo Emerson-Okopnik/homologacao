@@ -6,7 +6,9 @@ use App\Http\Controllers\Api\Admin\TenantUserController;
 use App\Http\Controllers\Api\Audit\AuditLogController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Auth\PasswordResetController;
+use App\Http\Controllers\Api\Homologation\ClientRequestController;
 use App\Http\Controllers\Api\Homologation\DashboardController;
+use App\Http\Controllers\Api\Portal\PortalController;
 use App\Http\Controllers\Api\Homologation\DocumentController;
 use App\Http\Controllers\Api\Homologation\ExternalTrackingController;
 use App\Http\Controllers\Api\Homologation\PendencyController;
@@ -55,8 +57,35 @@ Route::middleware(['auth:sanctum', 'tenant', 'super_admin', 'throttle:120,1'])
         Route::patch('tenants/{tenant:uuid}/users/{user}', [TenantUserController::class, 'update']);
     });
 
+// Portal do cliente (dono do sistema)
+Route::middleware(['auth:sanctum', 'tenant', 'client_portal', 'throttle:120,1'])
+    ->prefix('portal')
+    ->group(function (): void {
+        Route::get('summary', [PortalController::class, 'summary']);
+        Route::get('distributors', [PortalController::class, 'distributors']);
+        Route::get('units', [PortalController::class, 'units']);
+        Route::post('units', [PortalController::class, 'storeUnit']);
+        Route::post('obligations', [PortalController::class, 'obligations']);
+        Route::get('requests', [PortalController::class, 'index']);
+        Route::post('requests', [PortalController::class, 'store'])->middleware('throttle:20,1');
+        Route::get('requests/{clientRequest}', [PortalController::class, 'show']);
+        Route::put('requests/{clientRequest}', [PortalController::class, 'update']);
+        Route::post('requests/{clientRequest}/messages', [PortalController::class, 'message']);
+        Route::post('requests/{clientRequest}/documents', [PortalController::class, 'upload'])->middleware('throttle:60,1');
+        Route::get('documents/{document}/download', [PortalController::class, 'download']);
+    });
+
 Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::apiResource('users', UserController::class)->except(['destroy']);
+
+    // Solicitações abertas pelos clientes
+    Route::get('client-requests', [ClientRequestController::class, 'index']);
+    Route::get('client-requests/{clientRequest}', [ClientRequestController::class, 'show']);
+    Route::post('client-requests/{clientRequest}/assign', [ClientRequestController::class, 'assign']);
+    Route::post('client-requests/{clientRequest}/messages', [ClientRequestController::class, 'message']);
+    Route::post('client-requests/{clientRequest}/cancel', [ClientRequestController::class, 'cancel']);
+    Route::get('clients/{client}/portal-users', [ClientRequestController::class, 'portalUsers']);
+    Route::post('clients/{client}/portal-users', [ClientRequestController::class, 'createPortalUser']);
     Route::get('roles', [RoleController::class, 'index']);
     Route::get('audit-logs', [AuditLogController::class, 'index']);
 
