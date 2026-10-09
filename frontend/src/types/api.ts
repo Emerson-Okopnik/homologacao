@@ -44,6 +44,7 @@ export interface Me {
   tenant: { id: string; name: string; slug: string } | null
   permissions: PermissionKey[]
   is_super_admin?: boolean
+  client?: { id: string; name: string } | null
 }
 
 export interface Tenant {
@@ -429,3 +430,111 @@ export interface DashboardData {
   recent: Array<{ id: string; code: string; client: string | null; stage: WorkflowStage; stage_label: string; status: ProcessStatus; status_label: string; stage_changed_at: string | null }>
 }
 
+
+export type ClientRequestStatus = 'SUBMITTED' | 'IN_REVIEW' | 'NEEDS_INFO' | 'CONVERTED' | 'CANCELLED'
+
+export interface RequestModule {
+  brand: string
+  model: string
+  power_w: number | null
+  quantity: number | null
+}
+
+export interface RequestInverter {
+  brand: string
+  model: string
+  power_kw: number | null
+  quantity: number | null
+}
+
+export interface RequestBeneficiary {
+  uc_number: string
+  holder_name?: string | null
+  percentage: number | null
+}
+
+export interface RequestSystem {
+  compensation_mode: string
+  average_consumption_kwh: number | null
+  is_property_owner: boolean
+  installation_type: string
+  roof_material: string | null
+  installation_area_m2: number | null
+  integrator: string | null
+  modules: RequestModule[]
+  inverters: RequestInverter[]
+  has_battery: boolean
+  storage_energy_kwh: number | null
+  beneficiaries: RequestBeneficiary[]
+  notes: string | null
+}
+
+export interface RequestDocument {
+  id: string
+  document_type: string
+  label: string
+  party: string
+  original_name: string
+  version: number
+  review_status: string
+  review_notes: string | null
+  size_bytes: number
+  created_at: string
+}
+
+export interface ClientObligation {
+  type: string
+  label: string
+  required: boolean
+  reason: string
+  document: RequestDocument | null
+}
+
+export interface RequestMessage {
+  from: 'client' | 'team' | 'system'
+  author: string
+  text: string
+  at: string
+}
+
+export interface ClientRequest {
+  id: string
+  code: string
+  status: { value: ClientRequestStatus; label: string }
+  editable: boolean
+  client?: { id: string; name: string; document: string; email: string | null; phone: string | null }
+  consumer_unit?: ConsumerUnit
+  system: RequestSystem
+  declared_powers: { modules_kwp: number; inverters_kw: number }
+  messages: RequestMessage[]
+  technical_responsible: {
+    id: string
+    name: string
+    council: string
+    registration: string
+    email: string | null
+    phone: string | null
+  } | null
+  project: {
+    id: string
+    code: string
+    process: { id: string; code: string; stage: { value: string; label: string }; status: { value: string; label: string } } | null
+  } | null
+  client_obligations: ClientObligation[]
+  client_progress: { required: number; sent: number }
+  technical_obligations?: Array<{ type: string; label: string }>
+  documents: RequestDocument[]
+  assigned_at: string | null
+  converted_at: string | null
+  submitted_at: string | null
+  created_at: string
+}
+
+export interface PortalSummary {
+  client: { uuid: string; name: string; email: string | null; phone: string | null } | null
+  requests_total: number
+  requests_open: number
+  needs_info: number
+  converted: number
+  units: number
+}

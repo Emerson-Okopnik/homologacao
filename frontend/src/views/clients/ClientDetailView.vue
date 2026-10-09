@@ -9,6 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import ClientFormDialog from './ClientFormDialog.vue'
 import ConsumerUnitDialog from './ConsumerUnitDialog.vue'
 import ContactDialog from './ContactDialog.vue'
+import PortalAccessPanel from './PortalAccessPanel.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import { formatDocument, formatNumber } from '@/lib/format'
@@ -173,6 +174,14 @@ function refresh() {
             </li>
           </ul>
         </section>
+
+        <PortalAccessPanel
+          v-if="auth.can('clients.view')"
+          :client-id="client.id"
+          :client-name="client.name"
+          :client-email="client.email ?? null"
+          :can-manage="canManage"
+        />
       </div>
 
       <ClientFormDialog v-if="editingClient" :client="client" @close="editingClient = false" @saved="refresh" />

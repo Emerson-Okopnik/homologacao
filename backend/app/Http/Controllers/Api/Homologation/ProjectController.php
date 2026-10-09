@@ -87,8 +87,9 @@ final class ProjectController extends Controller
     {
         $this->authorize('projects.manage');
         $data = $this->validated($request);
+        $clientRequest = $this->clientRequestToConvert($request, $data);
 
-        $project = DB::transaction(function () use ($data, $request): SolarProject {
+        $project = DB::transaction(function () use ($data, $request, $clientRequest): SolarProject {
             $project = SolarProject::create([
                 ...$data['attributes'],
                 'code' => SequentialCode::next(SolarProject::class, 'PRJ'),
@@ -97,10 +98,12 @@ final class ProjectController extends Controller
 
             $this->syncRelations($project, $data, $request->user()->id);
 
+            $assignedUserId = $clientRequest?->technicalResponsible?->user_id ?? $request->user()->id;
+
             $process = HomologationProcess::create([
                 'solar_project_id' => $project->id,
                 'distributor_id' => $data['unit']->distributor_id,
-                'assigned_user_id' => $request->user()->id,
+                'assigned_user_id' => $assignedUserId,
                 'code' => SequentialCode::next(HomologationProcess::class, 'HOM'),
             ]);
             $process->forceFill([
@@ -111,6 +114,20 @@ final class ProjectController extends Controller
 
             $this->evaluator->evaluate($project);
             $this->timeline->record($process, 'CREATED', 'Processo aberto', 'Projeto cadastrado e em preparação.');
+
+            if ($clientRequest) {
+                $copied = app(\App\Domain\Documents\DocumentUploader::class)
+                    ->copyCurrentLinks('client_request', $clientRequest, 'project', $project, $request->user()->id);
+                $clientRequest->forceFill([
+                    'status' => \App\Domain\Projects\Enums\ClientRequestStatus::Converted,
+                    'solar_project_id' => $project->id,
+                    'converted_at' => now(),
+                ]);
+                $clientRequest->addMessage('system', 'Sistema', "Solicitação convertida no projeto {$project->code}.");
+                $clientRequest->save();
+                $this->timeline->record($process, 'CLIENT_REQUEST_CONVERTED',
+                    "Originado da solicitação {$clientRequest->code}", "{$copied} documento(s) do cliente reaproveitado(s).");
+            }
 
             return $project;
         });
@@ -291,6 +308,27 @@ final class ProjectController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function clientRequestToConvert(Request $request, array $data): ?\App\Domain\Projects\Models\ClientRequest
+    {
+        $uuid = $request->validate(['client_request_id' => ['sometimes', 'nullable', 'uuid']])['client_request_id'] ?? null;
+        if (! $uuid) {
+            return null;
+        }
+
+        $clientRequest = \App\Domain\Projects\Models\ClientRequest::query()->with('technicalResponsible')->where('uuid', $uuid)->firstOrFail();
+        if (! $clientRequest->status->isOpen()) {
+            throw new DomainException('Esta solicitação já foi encerrada.', 'request_closed');
+        }
+        if ($clientRequest->consumer_unit_id !== $data['unit']->id) {
+            throw new DomainException('A UC do projeto deve ser a mesma da solicitação do cliente.', 'request_unit_mismatch');
+        }
+
+        return $clientRequest;
+    }
+
     private function validated(Request $request): array
     {
         $data = $request->validate([

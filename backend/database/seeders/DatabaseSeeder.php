@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Clients\Models\Client;
+use App\Domain\TechnicalResponsibles\Models\TechnicalResponsible;
 use App\Domain\Tenancy\Models\Tenant;
 use App\Domain\Tenancy\TenantContext;
 use App\Domain\Users\Actions\ProvisionTenantRoles;
@@ -48,6 +50,29 @@ class DatabaseSeeder extends Seeder
             // Operador da plataforma (demonstração): acessa a tela de Super Admin.
             User::query()->where('email', 'admin@homologa.local')->first()
                 ?->forceFill(['is_super_admin' => true])->save();
+
+            // RT demonstrativo vinculado ao usuário funcionário.
+            $rtUser = User::query()->where('email', 'rt@homologa.local')->first();
+            if ($rtUser) {
+                TechnicalResponsible::query()->firstOrCreate(
+                    ['council' => 'CREA', 'registration' => '000000-DEMO', 'state' => 'SC'],
+                    ['user_id' => $rtUser->id, 'name' => $rtUser->name, 'email' => $rtUser->email, 'registration_status' => 'active', 'active' => true],
+                );
+            }
+
+            // Titular demonstrativo com acesso ao portal do cliente.
+            $client = Client::query()->firstOrCreate(
+                ['document' => '52998224725'],
+                ['type' => 'PF', 'name' => 'Cliente Demonstração', 'email' => 'cliente@homologa.local', 'status' => 'active'],
+            );
+            $portalUser = User::query()->firstOrCreate(
+                ['email' => 'cliente@homologa.local'],
+                ['name' => 'Cliente Demonstração', 'password' => 'Homologa@2026', 'active' => true],
+            );
+            $portalUser->forceFill(['client_id' => $client->id])->save();
+            $portalUser->roles()->syncWithoutDetaching(
+                Role::query()->where('slug', SystemRole::Client->value)->pluck('id'),
+            );
         });
 
         $this->call(RulesSeeder::class);
