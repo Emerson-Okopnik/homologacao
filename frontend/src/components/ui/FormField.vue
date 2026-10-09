@@ -6,6 +6,9 @@ defineProps<{
   type?: string
   autocomplete?: string
   required?: boolean
+  readonly?: boolean
+  min?: number
+  max?: number
   error?: string
   hint?: string
 }>()
@@ -27,6 +30,9 @@ function onInput(event: Event) {
       :type="type ?? 'text'"
       :autocomplete="autocomplete"
       :required="required"
+      :readonly="readonly"
+      :min="min"
+      :max="max"
       :aria-invalid="error ? true : undefined"
       :aria-describedby="error || hint ? `${id}-desc` : undefined"
       class="h-10 rounded-lg border bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"

@@ -5,6 +5,7 @@ defineProps<{
   label: string
   options: Array<{ value: string; label: string }>
   required?: boolean
+  disabled?: boolean
   error?: string
   hint?: string
   placeholder?: string
@@ -21,6 +22,7 @@ const id = useId()
       :id="id"
       v-model="model"
       :required="required"
+      :disabled="disabled"
       :aria-invalid="error ? true : undefined"
       :aria-describedby="error || hint ? `${id}-desc` : undefined"
       class="h-10 rounded-lg border bg-surface px-3 text-sm text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"

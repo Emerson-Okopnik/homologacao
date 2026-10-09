@@ -1,4 +1,4 @@
-import type { ProcessDocument } from './api'
+import type { Option, ProcessDocument, ProcessStatus, WorkflowStage as ProcessPhase } from './api'
 export interface ProjectVersion {
   id: string
   version: number
@@ -123,6 +123,8 @@ export interface WorkflowStage {
   name: string
   order: number
   stage_type: string
+  phase: ProcessPhase | null
+  terminal: boolean
   next: string[]
   active: boolean
 }
@@ -143,6 +145,8 @@ export interface Requirement {
   }
 }
 export interface WorkflowConfiguration {
+  phases: Option<ProcessPhase>[]
+  status_types: Array<Option<ProcessStatus> & { phase: ProcessPhase | null; terminal: boolean }>
   stages: WorkflowStage[]
   requirements: Requirement[]
   credentials: Array<{

@@ -101,14 +101,7 @@ final class ProcessWorkflow
 
         return DB::transaction(function () use ($process, $target, $actor, $reason, $input, $current, $stage): HomologationProcess {
             $process->status = $target;
-            $process->stage = match ($target) {
-                ProcessStatus::Enviado, ProcessStatus::EmAnalise => WorkflowStage::ExternalAnalysis,
-                ProcessStatus::PendenciaDistribuidora => WorkflowStage::Correction,
-                ProcessStatus::Aprovado => WorkflowStage::Execution,
-                ProcessStatus::VistoriaSolicitada => WorkflowStage::Inspection,
-                ProcessStatus::Conectado => WorkflowStage::Connection,
-                default => WorkflowStage::Preparation,
-            };
+            $process->stage = $target->workflowStage() ?? WorkflowStage::Preparation;
             $process->stage_changed_at = now();
             $process->status_changed_at = now();
             $process->current_stage_id = $stage->id;

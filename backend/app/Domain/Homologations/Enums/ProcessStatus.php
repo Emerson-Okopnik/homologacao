@@ -73,6 +73,20 @@ enum ProcessStatus: string
         return in_array($this, [self::Rascunho, self::EmPreparacao, self::PendenciaDistribuidora, self::Reprovado], true);
     }
 
+    /** Fase de entrada da situação. O cancelamento pode ocorrer em qualquer fase. */
+    public function workflowStage(): ?WorkflowStage
+    {
+        return match ($this) {
+            self::Rascunho, self::EmPreparacao, self::ProntoParaEnvio, self::Reprovado => WorkflowStage::Preparation,
+            self::Enviado, self::EmAnalise => WorkflowStage::ExternalAnalysis,
+            self::PendenciaDistribuidora => WorkflowStage::Correction,
+            self::Aprovado => WorkflowStage::Execution,
+            self::VistoriaSolicitada => WorkflowStage::Inspection,
+            self::Conectado => WorkflowStage::Connection,
+            self::Cancelado => null,
+        };
+    }
+
     /**
      * Ordem das colunas do Kanban.
      *

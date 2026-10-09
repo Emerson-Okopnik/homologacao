@@ -1,27 +1,33 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import FormField from '@/components/ui/FormField.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import { api, toApiError, type ApiError } from '@/lib/http'
-import type { Distributor, Option } from '@/types/api'
-import type { WorkflowStage, Requirement } from '@/types/homologation'
+import type { Distributor, Option, WorkflowStage as ProcessPhase } from '@/types/api'
+import type { WorkflowConfiguration, WorkflowStage, Requirement } from '@/types/homologation'
 const props = defineProps<{
   kind: 'stage' | 'requirement' | 'credential'
   stage?: WorkflowStage
   requirement?: Requirement
   stages: WorkflowStage[]
+  phases: WorkflowConfiguration['phases']
+  statusTypes: WorkflowConfiguration['status_types']
+  phase?: ProcessPhase | null
   distributors: Distributor[]
   documentTypes: Option[]
 }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const r = props.requirement,
   s = props.stage
+const initialPhase = s ? s.phase : props.phase === undefined ? 'PREPARATION' : props.phase
+const initialType = s?.stage_type ?? props.statusTypes.find(type => type.phase === initialPhase && type.value !== 'rascunho')?.value ?? 'em_preparacao'
 const form = reactive({
   code: s?.code ?? r?.code ?? '',
   name: s?.name ?? r?.name ?? '',
-  order: String(s?.order ?? props.stages.length),
-  stage_type: s?.stage_type ?? 'em_preparacao',
+  order: String((s?.order ?? props.stages.length) + 1),
+  phase: initialPhase ?? 'SHARED',
+  stage_type: initialType,
   next: [...(s?.next ?? [])],
   active: s?.active ?? r?.active ?? true,
   distributor_id: r?.distributor_id ?? '',
@@ -38,19 +44,20 @@ const form = reactive({
 })
 const saving = ref(false),
   error = ref<ApiError | null>(null)
-const macros = [
-  { value: 'rascunho', label: 'Rascunho' },
-  { value: 'em_preparacao', label: 'Preparação' },
-  { value: 'pronto_para_envio', label: 'Pronto para envio' },
-  { value: 'enviado', label: 'Enviado' },
-  { value: 'em_analise', label: 'Em análise' },
-  { value: 'pendencia_distribuidora', label: 'Pendência da distribuidora' },
-  { value: 'aprovado', label: 'Parecer aprovado' },
-  { value: 'vistoria_solicitada', label: 'Vistoria solicitada' },
-  { value: 'conectado', label: 'Conectado' },
-  { value: 'reprovado', label: 'Reprovado' },
-  { value: 'cancelado', label: 'Cancelado' },
-]
+const phaseOptions = computed(() => [...props.phases, { value: 'SHARED', label: 'Qualquer fase (cancelamento)' }])
+const statusOptions = computed(() => props.statusTypes.filter(type => (type.phase ?? 'SHARED') === form.phase))
+const terminal = computed(() => props.statusTypes.find(type => type.value === form.stage_type)?.terminal === true)
+const initialStage = computed(() => s?.code === 'rascunho')
+const transitionGroups = computed(() => [
+  ...props.phases.map(phase => ({ ...phase, stages: props.stages.filter(target => target.phase === phase.value && (target.active || form.next.includes(target.code)) && (target.id !== s?.id || form.next.includes(target.code))) })),
+  { value: 'SHARED', label: 'Cancelamento', stages: props.stages.filter(target => target.phase === null && (target.active || form.next.includes(target.code)) && (target.id !== s?.id || form.next.includes(target.code))) },
+].filter(group => group.stages.length))
+watch(() => form.phase, () => {
+  if (!statusOptions.value.some(type => type.value === form.stage_type)) {
+    form.stage_type = statusOptions.value.find(type => type.value !== 'rascunho')?.value ?? statusOptions.value[0]?.value ?? ''
+  }
+})
+watch(terminal, value => { if (value) form.next = [] })
 const modalityOptions = [
   { value: 'autoconsumo_local', label: 'Autoconsumo local' },
   { value: 'autoconsumo_remoto', label: 'Autoconsumo remoto' },
@@ -70,9 +77,9 @@ async function submit() {
       body = {
         code: form.code,
         name: form.name,
-        order: Number(form.order),
+        order: Number(form.order) - 1,
         stage_type: form.stage_type,
-        next: form.next,
+        next: terminal.value ? [] : form.next,
         active: form.active,
       }
     }
@@ -125,7 +132,7 @@ async function submit() {
 </script>
 <template>
   <BaseDialog
-    :title="kind === 'stage' ? 'Configurar etapa' : kind === 'requirement' ? 'Configurar requisito' : 'Referência de credencial'"
+    :title="kind === 'stage' ? stage ? 'Configurar situação' : 'Adicionar situação' : kind === 'requirement' ? 'Configurar requisito' : 'Referência de credencial'"
     size="lg"
     :submitting="saving"
     :error="error"
@@ -135,34 +142,42 @@ async function submit() {
     <ul v-if="error && Object.keys(error.errors).length" class="list-disc pl-5 text-sm text-danger">
       <li v-for="(messages, field) in error.errors" :key="field">{{ messages[0] }}</li>
     </ul>
-    <template v-if="kind !== 'credential'"
-      ><FormField v-model="form.name" label="Nome" required /><FormField
-        v-model="form.code"
-        label="Código"
-        required
-        :readonly="!!stage"
-        hint="Use letras minúsculas, números e sublinhado."
-    /></template>
+    <FormField v-if="kind !== 'credential'" v-model="form.name" label="Nome" required />
     <template v-if="kind === 'stage'">
-      <FormField v-model="form.order" label="Ordem no fluxo" type="number" /><SelectField
+      <SelectField v-model="form.phase" label="Fase do processo" :options="phaseOptions" :disabled="initialStage"
+        hint="Fase de entrada da situação. A execução, a vistoria e a conexão também avançam pelos registros do processo." />
+      <SelectField
         v-model="form.stage_type"
-        label="Natureza da etapa"
-        :options="macros"
-        hint="As validações de envio e conexão seguem a natureza selecionada."
+        label="Situação base"
+        :options="statusOptions"
+        :disabled="initialStage"
+        hint="Determina as validações de documentos, envio, vistoria e conexão."
       />
-      <fieldset>
-        <legend class="mb-2 text-sm font-medium">Etapas seguintes permitidas</legend>
-        <div class="grid gap-2 sm:grid-cols-2">
-          <label
-            v-for="target in stages.filter((t) => t.active && t.id !== stage?.id)"
-            :key="target.id"
-            class="flex items-center gap-2 text-sm"
-            ><input v-model="form.next" type="checkbox" :value="target.code" />{{ target.name }}</label
-          >
+      <p v-if="terminal" class="rounded-lg bg-canvas p-3 text-sm text-muted">Esta situação encerra o processo e não permite novas transições.</p>
+      <fieldset v-else>
+        <legend class="mb-2 text-sm font-medium">Situações seguintes permitidas</legend>
+        <div v-for="group in transitionGroups" :key="group.value" class="mb-3">
+          <p class="mb-2 text-xs font-semibold text-muted">{{ group.label }}</p>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <label v-for="target in group.stages" :key="target.id" class="flex items-center gap-2 text-sm">
+              <input v-model="form.next" type="checkbox" :value="target.code" />
+              {{ target.name }}
+              <span v-if="!target.active" class="text-xs text-muted">(desabilitada; remova a seleção)</span>
+            </label>
+          </div>
         </div>
       </fieldset>
+      <details class="rounded-lg border border-line p-3" :open="!stage">
+        <summary class="cursor-pointer text-sm font-medium">Código e ordem da situação</summary>
+        <div class="mt-3 grid gap-4 sm:grid-cols-2">
+          <FormField v-model="form.code" label="Código" required :readonly="!!stage" :hint="stage ? 'O código de uma situação existente é permanente.' : 'Use letras minúsculas, números e sublinhado.'" />
+          <FormField v-model="form.order" label="Ordem da situação" type="number" :min="1" :max="1001" hint="Posição das situações dentro da configuração." />
+        </div>
+      </details>
+      <p v-if="initialStage" class="text-sm text-muted">Rascunho é a situação inicial e permanece habilitada para abrir novos processos.</p>
     </template>
     <template v-if="kind === 'requirement'">
+      <FormField v-model="form.code" label="Código" required hint="Use letras minúsculas, números e sublinhado." />
       <SelectField
         v-model="form.distributor_id"
         label="Distribuidora"
@@ -240,6 +255,6 @@ async function submit() {
         ]"
       /><FormField v-model="form.expires" label="Validade (opcional)" type="datetime-local" />
     </template>
-    <label class="flex items-center gap-2 text-sm"><input v-model="form.active" type="checkbox" />Ativo</label>
+    <label class="flex items-center gap-2 text-sm"><input v-model="form.active" type="checkbox" :disabled="kind === 'stage' && initialStage" />{{ kind === 'stage' ? 'Situação habilitada' : 'Ativo' }}</label>
   </BaseDialog>
 </template>

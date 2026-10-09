@@ -6,6 +6,7 @@ use App\Domain\Distributors\Models\Distributor;
 use App\Domain\Distributors\Models\ExternalCredential;
 use App\Domain\Documents\DocumentRequirements;
 use App\Domain\Homologations\Enums\ProcessStatus;
+use App\Domain\Homologations\Enums\WorkflowStage as ProcessStage;
 use App\Domain\Homologations\Models\ChecklistItem;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\Requirement;
@@ -25,7 +26,10 @@ final class WorkflowConfigurationController extends Controller
         $this->authorize('projects.view');
         app(WorkflowDefinition::class)->provision();
 
-        return response()->json(['data' => ['stages' => WorkflowStage::orderBy('order')->get()->map(fn ($s) => $this->stage($s)),
+        return response()->json(['data' => [
+            'phases' => array_map(fn (ProcessStage $phase) => ['value' => $phase->value, 'label' => $phase->label()], ProcessStage::ordered()),
+            'status_types' => array_map(fn (ProcessStatus $status) => ['value' => $status->value, 'label' => $status->label(), 'phase' => $status->workflowStage()?->value, 'terminal' => $status->isTerminal()], ProcessStatus::cases()),
+            'stages' => WorkflowStage::orderBy('order')->get()->map(fn ($s) => $this->stage($s)),
             'requirements' => Requirement::with('distributor')->orderBy('id')->get()->map(fn ($r) => ['id' => $r->uuid, 'code' => $r->code, 'name' => $r->name, 'distributor_id' => $r->distributor?->uuid, 'conditions' => $r->applies_when_json ?? [], 'required_document_type' => $r->required_document_type, 'active' => $r->active]),
             'credentials' => ExternalCredential::get()->map(fn ($c) => ['id' => $c->uuid, 'distributor_id' => Distributor::findOrFail($c->distributor_id)->uuid, 'credential_ref' => $c->credential_ref, 'auth_type' => $c->auth_type, 'expires_at' => $c->expires_at?->toIso8601String(), 'active' => $c->active])]]);
     }
@@ -117,6 +121,10 @@ final class WorkflowConfigurationController extends Controller
     /** @return array<string, mixed> */
     private function stage(WorkflowStage $s): array
     {
-        return ['id' => $s->uuid, 'code' => $s->code, 'name' => $s->name, 'order' => $s->order, 'stage_type' => $s->stage_type, 'next' => $s->next_stage_rule_json['next'] ?? [], 'active' => $s->active];
+        $status = ProcessStatus::from($s->stage_type);
+
+        return ['id' => $s->uuid, 'code' => $s->code, 'name' => $s->name, 'order' => $s->order, 'stage_type' => $s->stage_type,
+            'phase' => $status->workflowStage()?->value, 'terminal' => $status->isTerminal(),
+            'next' => $s->next_stage_rule_json['next'] ?? [], 'active' => $s->active];
     }
 }
