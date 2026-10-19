@@ -3,12 +3,15 @@
 namespace App\Domain\Users\Models;
 
 use App\Domain\Audit\Concerns\Auditable;
+use App\Domain\Clients\Models\Client;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\Users\Enums\PermissionKey;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -37,7 +40,7 @@ class User extends Authenticatable
     use HasUuids;
     use Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'active'];
+    protected $fillable = ['name', 'email', 'password', 'active', 'client_id'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -100,14 +103,22 @@ class User extends Authenticatable
         return $this->permissionKeys()->contains($key);
     }
 
+    /** @param Builder<User> $query */
+    public function scopeTechnicalStaff(Builder $query): void
+    {
+        $query->where('active', true)->whereNull('client_id')
+            ->whereHas('roles.permissions', fn ($p) => $p->where('key', PermissionKey::ProjectsManage->value))
+            ->whereDoesntHave('roles.permissions', fn ($p) => $p->where('key', PermissionKey::PortalAccess->value));
+    }
+
     /**
      * Cliente ao qual o usuário do portal pertence (null para funcionários).
      *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\App\Domain\Clients\Models\Client, $this>
+     * @return BelongsTo<Client, $this>
      */
-    public function client(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function client(): BelongsTo
     {
-        return $this->belongsTo(\App\Domain\Clients\Models\Client::class);
+        return $this->belongsTo(Client::class);
     }
 
     public function isPortalUser(): bool

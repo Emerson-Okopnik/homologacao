@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import FormField from '@/components/ui/FormField.vue'
+import PortalClientField from '@/views/users/PortalClientField.vue'
 import { api, ApiError, toApiError } from '@/lib/http'
 import type { Role, User } from '@/types/api'
 
@@ -15,7 +16,9 @@ const form = reactive({
   roles: props.user?.roles?.map((r) => r.slug) ?? [],
   active: props.user?.active ?? true,
   is_super_admin: props.user?.is_super_admin ?? false,
+  client_id: props.user?.client?.id ?? '',
 })
+const isPortal = computed(() => props.roles.some(role => form.roles.includes(role.slug) && (role.slug === 'cliente' || role.permissions?.includes('portal.access'))))
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
 const isSelf = props.user?.id === props.selfId
@@ -27,12 +30,12 @@ async function submit() {
     if (props.user) {
       await api(`/admin/tenants/${props.tenantId}/users/${props.user.id}`, {
         method: 'PATCH',
-        body: { roles: form.roles, active: form.active, is_super_admin: form.is_super_admin },
+        body: { roles: form.roles, active: form.active, is_super_admin: form.is_super_admin, client_id: isPortal.value ? form.client_id || null : null },
       })
     } else {
       await api(`/admin/tenants/${props.tenantId}/users`, {
         method: 'POST',
-        body: { name: form.name, email: form.email, password: form.password, roles: form.roles },
+        body: { name: form.name, email: form.email, password: form.password, roles: form.roles, client_id: isPortal.value ? form.client_id || null : null },
       })
     }
     emit('saved')
@@ -84,6 +87,7 @@ async function submit() {
       </div>
       <p v-if="error?.firstError('roles')" class="mt-1.5 text-xs text-danger">{{ error.firstError('roles') }}</p>
     </fieldset>
+    <PortalClientField v-if="isPortal" v-model="form.client_id" :url="`/admin/tenants/${tenantId}/clients`" :error="error?.firstError('client_id')" />
 
     <div v-if="user" class="flex flex-col gap-3 rounded-xl border border-line p-4">
       <label class="flex items-center gap-2 text-sm">

@@ -6,7 +6,9 @@ use App\Domain\Audit\Concerns\Auditable;
 use App\Domain\Projects\Models\SolarProject;
 use App\Domain\Shared\Concerns\HasPublicUuid;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
+use App\Domain\Users\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -20,6 +22,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $phone
  * @property string $registration_status
  * @property bool $active
+ * @property int|null $user_id
+ * @property-read User|null $user
  */
 class TechnicalResponsible extends Model
 {
@@ -40,5 +44,11 @@ class TechnicalResponsible extends Model
     public function projects(): HasMany
     {
         return $this->hasMany(SolarProject::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

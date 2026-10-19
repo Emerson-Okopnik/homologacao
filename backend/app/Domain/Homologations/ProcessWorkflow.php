@@ -26,7 +26,7 @@ final class ProcessWorkflow
      */
     public function readinessIssues(HomologationProcess $process): array
     {
-        return app(ValidationService::class)->issues($process);
+        return app(ValidationService::class)->issues($process, true);
     }
 
     /**

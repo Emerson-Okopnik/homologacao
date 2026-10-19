@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Homologation;
 
 use App\Domain\Documents\DocumentRequirements;
+use App\Domain\Homologations\Enums\ProcessStatus;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\ProcessDeadline;
 use App\Domain\Homologations\Models\WorkflowStage;
@@ -96,7 +97,11 @@ final class ProcessResource extends JsonResource
             'stage_code' => $stage !== null ? $stage->code : $this->status->value,
             'priority' => $this->priority,
             'process_type' => $this->process_type,
-            'allowed_transitions' => app(WorkflowDefinition::class)->transitions($this->resource)->map(fn ($s) => ['value' => $s->code, 'label' => $s->name, 'stage_type' => $s->stage_type])->values(),
+            'allowed_transitions' => app(WorkflowDefinition::class)->transitions($this->resource)->map(function ($s): array {
+                $reasons = $s->stage_type === ProcessStatus::ProntoParaEnvio->value ? ($this->readinessIssues ?? ['Abra os detalhes do processo para verificar os requisitos de envio.']) : [];
+
+                return ['value' => $s->code, 'label' => $s->name, 'stage_type' => $s->stage_type, 'available' => $reasons === [], 'reasons' => $reasons];
+            })->values(),
             'editable' => $this->status->isEditable(),
             'protocol_number' => $this->protocol_number,
             'due_date' => $this->due_date?->toDateString(),

@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Auth\PasswordResetController;
 use App\Http\Controllers\Api\Homologation\ClientRequestController;
 use App\Http\Controllers\Api\Homologation\DashboardController;
-use App\Http\Controllers\Api\Portal\PortalController;
 use App\Http\Controllers\Api\Homologation\DocumentController;
 use App\Http\Controllers\Api\Homologation\ExternalTrackingController;
 use App\Http\Controllers\Api\Homologation\PendencyController;
@@ -16,6 +15,7 @@ use App\Http\Controllers\Api\Homologation\ProcessController;
 use App\Http\Controllers\Api\Homologation\ProjectController;
 use App\Http\Controllers\Api\Homologation\ProjectTechnicalController;
 use App\Http\Controllers\Api\Homologation\WorkflowConfigurationController;
+use App\Http\Controllers\Api\Portal\PortalController;
 use App\Http\Controllers\Api\Registry\ClientController;
 use App\Http\Controllers\Api\Registry\ConsumerUnitController;
 use App\Http\Controllers\Api\Registry\DistributorController;
@@ -53,6 +53,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'super_admin', 'throttle:120,1'])
         Route::delete('tenants/{tenant:uuid}/roles/{role}', [TenantRoleController::class, 'destroy']);
 
         Route::get('tenants/{tenant:uuid}/users', [TenantUserController::class, 'index']);
+        Route::get('tenants/{tenant:uuid}/clients', [TenantUserController::class, 'clients']);
         Route::post('tenants/{tenant:uuid}/users', [TenantUserController::class, 'store']);
         Route::patch('tenants/{tenant:uuid}/users/{user}', [TenantUserController::class, 'update']);
     });
@@ -76,6 +77,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'client_portal', 'throttle:120,1'])
     });
 
 Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+    Route::get('users/client-options', [UserController::class, 'clients']);
     Route::apiResource('users', UserController::class)->except(['destroy']);
 
     // Solicitações abertas pelos clientes
@@ -106,6 +108,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::put('distributors/{distributor}', [DistributorController::class, 'update']);
 
     Route::get('technical-responsibles', [TechnicalResponsibleController::class, 'index']);
+    Route::get('technical-responsibles/users', [TechnicalResponsibleController::class, 'users']);
     Route::post('technical-responsibles', [TechnicalResponsibleController::class, 'store']);
     Route::put('technical-responsibles/{technicalResponsible}', [TechnicalResponsibleController::class, 'update']);
 

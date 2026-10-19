@@ -8,6 +8,8 @@ use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\Requirement;
 use App\Domain\Projects\ProjectTechnicalData;
 use App\Domain\Projects\ProjectVersionService;
+use App\Domain\Rules\Enums\RequirementPhase;
+use App\Domain\Rules\RequirementEngine;
 use App\Domain\Shared\Exceptions\DomainException;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -63,6 +65,8 @@ final class ValidationService
         if ($process->openPendencies()->whereNull('external_pending_item_id')->exists()) {
             $issues[] = 'Resolva as pendências internas em aberto.';
         }
+
+        $issues = [...$issues, ...app(RequirementEngine::class)->evaluate($project, RequirementPhase::Submission, $process)['blocking']];
 
         return array_values(array_unique($issues));
     }

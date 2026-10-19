@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Users;
 
+use App\Domain\Clients\Models\Client;
 use App\Domain\Users\Actions\CreateUser;
 use App\Domain\Users\Actions\UpdateUser;
 use App\Domain\Users\Models\User;
@@ -27,7 +28,7 @@ final class UserController extends Controller
         ]);
 
         $users = User::query()
-            ->with('roles')
+            ->with('roles', 'client')
             ->when($validated['search'] ?? null, function ($q, string $search): void {
                 $term = '%'.addcslashes(mb_strtolower($search), '%_\\').'%';
                 $q->where(fn ($w) => $w->whereRaw('lower(name) like ?', [$term])->orWhereRaw('lower(email) like ?', [$term]));
@@ -45,7 +46,7 @@ final class UserController extends Controller
     {
         $this->authorize('create', User::class);
 
-        $data = $request->safe()->only(['name', 'email', 'password', 'active']);
+        $data = $request->safe()->only(['name', 'email', 'password', 'active', 'client_id']);
         $user = $action->handle($data, $request->validated('roles'));
 
         return (new UserResource($user))->response()->setStatusCode(201);
@@ -55,7 +56,7 @@ final class UserController extends Controller
     {
         $this->authorize('view', $user);
 
-        return new UserResource($user->load('roles'));
+        return new UserResource($user->load('roles', 'client'));
     }
 
     public function update(UpdateUserRequest $request, User $user, UpdateUser $action): UserResource
@@ -63,7 +64,7 @@ final class UserController extends Controller
         $this->authorize('update', $user);
 
         $data = array_filter(
-            $request->safe()->only(['name', 'email', 'password', 'active']),
+            $request->safe()->only(['name', 'email', 'password', 'active', 'client_id']),
             fn ($value, $key) => ! ($key === 'password' && ($value === null || $value === '')),
             ARRAY_FILTER_USE_BOTH,
         );
@@ -71,5 +72,13 @@ final class UserController extends Controller
         $updated = $action->handle($request->user(), $user, $data, $request->validated('roles'));
 
         return new UserResource($updated);
+    }
+
+    public function clients(): JsonResponse
+    {
+        $this->authorize('create', User::class);
+
+        return response()->json(['data' => Client::query()->orderBy('name')->get(['uuid', 'name', 'document'])
+            ->map(fn ($client) => ['id' => $client->uuid, 'name' => $client->name, 'document' => $client->document])]);
     }
 }

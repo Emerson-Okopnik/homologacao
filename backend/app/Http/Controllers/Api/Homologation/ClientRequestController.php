@@ -73,6 +73,9 @@ final class ClientRequestController extends Controller
         if ($rt->user_id === null) {
             throw new DomainException('Vincule este RT a um usuário do sistema antes de atribuí-lo.', 'responsible_without_user');
         }
+        if (! User::query()->technicalStaff()->whereKey($rt->user_id)->exists()) {
+            throw new DomainException('O usuário vinculado ao RT está inativo ou não possui acesso interno a projetos. Revise o vínculo no cadastro do responsável técnico.', 'responsible_user_unavailable');
+        }
 
         $clientRequest->forceFill([
             'technical_responsible_id' => $rt->id,
@@ -143,8 +146,7 @@ final class ClientRequestController extends Controller
         ]);
 
         $user = DB::transaction(function () use ($action, $data, $client): User {
-            $user = $action->handle([...$data, 'active' => true], [SystemRole::Client->value]);
-            $user->forceFill(['client_id' => $client->id])->save();
+            $user = $action->handle([...$data, 'active' => true, 'client_id' => $client->uuid], [SystemRole::Client->value]);
 
             return $user;
         });

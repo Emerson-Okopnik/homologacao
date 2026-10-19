@@ -63,6 +63,7 @@ describe('envio assistido', () => {
       original_name: 'recibo.pdf',
       version: 1,
       review_status: 'aprovado',
+      is_current: true,
     } as ProcessDocument
     const wrapper = mount(TrackingActionDialog, {
       props: { process, tracking, documents: [receipt], action: 'confirm', submission },

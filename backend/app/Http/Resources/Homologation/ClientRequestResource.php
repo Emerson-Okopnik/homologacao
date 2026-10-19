@@ -10,6 +10,7 @@ use App\Domain\Projects\Models\ClientRequest;
 use App\Http\Resources\Registry\ConsumerUnitResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Collection;
 
 /**
  * Solicitação do cliente. Separa explicitamente as obrigações do cliente
@@ -74,8 +75,8 @@ final class ClientRequestResource extends JsonResource
                 'process' => $process ? [
                     'id' => $process->uuid,
                     'code' => $process->code,
-                    'stage' => ['value' => $process->stage?->value, 'label' => $process->stage?->label()],
-                    'status' => ['value' => $process->status?->value, 'label' => method_exists($process->status, 'label') ? $process->status->label() : $process->status?->value],
+                    'stage' => ['value' => $process->stage->value, 'label' => $process->stage->label()],
+                    'status' => ['value' => $process->status->value, 'label' => $process->status->label()],
                 ] : null,
             ] : null,
             'client_obligations' => $clientObligations,
@@ -109,9 +110,9 @@ final class ClientRequestResource extends JsonResource
     /**
      * Antes da conversão os documentos ficam na solicitação; depois, no projeto.
      *
-     * @return \Illuminate\Support\Collection<int, Document>
+     * @return Collection<int, Document>
      */
-    private function currentDocuments(): \Illuminate\Support\Collection
+    private function currentDocuments(): Collection
     {
         [$type, $id] = $this->solar_project_id ? ['project', $this->solar_project_id] : ['client_request', $this->id];
         $clientTypes = DocumentTypes::ofParty(DocumentTypes::PARTY_CLIENT);

@@ -41,7 +41,7 @@ final class DocumentUploader
 
             $document = Document::create([
                 'document_type' => $documentType,
-                'version' => ($previous?->version ?? 0) + 1,
+                'version' => ($previous->version ?? 0) + 1,
                 'supersedes_document_id' => $previous?->id,
                 'original_name' => Str::limit($file->getClientOriginalName(), 250, ''),
                 'storage_path' => $path,

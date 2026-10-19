@@ -33,6 +33,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $converted_at
  * @property Carbon|null $submitted_at
  * @property Carbon|null $created_at
+ * @property-read TechnicalResponsible|null $technicalResponsible
  */
 class ClientRequest extends Model
 {
@@ -108,8 +109,12 @@ class ClientRequest extends Model
      */
     public function declaredPowers(): array
     {
-        $modules = collect($this->system['modules'] ?? [])->sum(fn ($m) => (float) ($m['power_w'] ?? 0) * (int) ($m['quantity'] ?? 0)) / 1000;
-        $inverters = collect($this->system['inverters'] ?? [])->sum(fn ($i) => (float) ($i['power_kw'] ?? 0) * (int) ($i['quantity'] ?? 0));
+        /** @var list<array{power_w?: float, quantity?: int}> $moduleItems */
+        $moduleItems = $this->system['modules'] ?? [];
+        /** @var list<array{power_kw?: float, quantity?: int}> $inverterItems */
+        $inverterItems = $this->system['inverters'] ?? [];
+        $modules = collect($moduleItems)->sum(fn ($m) => (float) ($m['power_w'] ?? 0) * (int) ($m['quantity'] ?? 0)) / 1000;
+        $inverters = collect($inverterItems)->sum(fn ($i) => (float) ($i['power_kw'] ?? 0) * (int) ($i['quantity'] ?? 0));
 
         return ['modules_kwp' => round($modules, 3), 'inverters_kw' => round($inverters, 3)];
     }

@@ -84,7 +84,7 @@ const documentOptions = computed(() => {
           ? 'relatorio_vistoria'
           : null
   return props.documents
-    .filter((d) => d.review_status === 'aprovado' && (props.action !== 'response' || d.is_current) && (!type || d.document_type === type))
+    .filter((d) => d.review_status === 'aprovado' && d.is_current && (!type || d.document_type === type || (type === 'relatorio_vistoria' && d.document_type === 'INSPECTION_REPORT')))
     .map((d) => ({ value: d.id, label: `${d.type_label} · ${d.original_name} · v${d.version}` }))
 })
 const { data: users } = useApiQuery(
@@ -266,7 +266,9 @@ async function submit() {
         label="Agendada para"
         type="datetime-local"
       /><FormField v-model="form.performed" label="Realizada em" type="datetime-local" />
-      <SelectField v-model="form.document" label="Relatório revisado" placeholder="Selecione" :options="documentOptions" /><FormField
+      <SelectField v-model="form.document" label="Relatório revisado" placeholder="Selecione" :options="documentOptions" />
+      <p v-if="!documentOptions.length" class="text-sm text-muted">Anexe e aprove o relatório em “Vistorias e conexão” antes de registrar a realização ou o resultado.</p>
+      <FormField
         v-model="form.connected"
         label="Conexão aprovada em"
         type="datetime-local"

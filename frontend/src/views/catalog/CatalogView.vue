@@ -102,7 +102,10 @@ function saved() {
           <tr v-for="rt in responsibles" :key="rt.id">
             <td class="px-4 py-3 font-medium">{{ rt.name }}</td>
             <td class="px-4 py-3 tabular-nums">{{ rt.council }}-{{ rt.state }} {{ rt.registration }}</td>
-            <td class="px-4 py-3 text-muted">{{ rt.email ?? rt.phone ?? '—' }}</td>
+            <td class="px-4 py-3 text-muted">
+              <p>{{ rt.email ?? rt.phone ?? '—' }}</p>
+              <p class="mt-1 text-xs" :class="rt.user ? 'text-muted' : 'text-warning'">{{ rt.user ? `Conta: ${rt.user.name}` : 'Sem usuário vinculado' }}</p>
+            </td>
             <td class="px-4 py-3 text-right tabular-nums">{{ rt.projects_count ?? 0 }}</td>
             <td class="px-4 py-3">
               <StatusBadge :tone="rt.active && rt.registration_status === 'regular' ? 'success' : 'warning'">

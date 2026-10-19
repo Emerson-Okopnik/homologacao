@@ -3,7 +3,7 @@ import { useId } from 'vue'
 
 defineProps<{
   label: string
-  options: Array<{ value: string; label: string }>
+  options: Array<{ value: string; label: string; disabled?: boolean }>
   required?: boolean
   disabled?: boolean
   error?: string
@@ -29,7 +29,7 @@ const id = useId()
       :class="error ? 'border-danger' : 'border-line'"
     >
       <option v-if="placeholder !== undefined" value="">{{ placeholder }}</option>
-      <option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option>
+      <option v-for="option in options" :key="option.value" :value="option.value" :disabled="option.disabled">{{ option.label }}</option>
     </select>
     <p v-if="error" :id="`${id}-desc`" class="text-xs text-danger">{{ error }}</p>
     <p v-else-if="hint" :id="`${id}-desc`" class="text-xs text-muted">{{ hint }}</p>

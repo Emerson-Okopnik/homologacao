@@ -11,7 +11,7 @@ beforeEach(function (): void {
     app(TenantContext::class)->set($this->tenant);
 });
 
-it('provisiona os cinco perfis padrão de forma idempotente', function (): void {
+it('provisiona os perfis padrão de forma idempotente', function (): void {
     app(ProvisionTenantRoles::class)->handle($this->tenant);
 
     $slugs = app(TenantContext::class)->run($this->tenant, fn () => Role::query()->pluck('slug')->sort()->values()->all());
@@ -19,12 +19,17 @@ it('provisiona os cinco perfis padrão de forma idempotente', function (): void 
     expect($slugs)->toBe(collect(SystemRole::cases())->pluck('value')->sort()->values()->all());
 });
 
-it('concede ao administrador todas as permissões', function (): void {
+it('concede ao administrador as permissões da equipe e reserva o portal ao cliente', function (): void {
     $admin = userWithRole($this->tenant, SystemRole::Administrator);
 
     foreach (PermissionKey::cases() as $permission) {
-        expect($admin->hasPermission($permission))->toBeTrue();
+        expect($admin->hasPermission($permission))->toBe($permission !== PermissionKey::PortalAccess);
     }
+
+    $client = userWithRole($this->tenant, SystemRole::Client);
+    expect($client->hasPermission(PermissionKey::PortalAccess))->toBeTrue()
+        ->and($client->hasPermission(PermissionKey::ProjectsManage))->toBeFalse()
+        ->and($client->hasPermission(PermissionKey::ProjectsView))->toBeFalse();
 });
 
 it('perfil consulta é somente leitura', function (): void {

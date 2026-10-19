@@ -18,6 +18,7 @@ export type PermissionKey =
   | 'requirements.configure'
   | 'integrations.configure'
   | 'dashboard.view'
+  | 'portal.access'
 
 export interface Role {
   slug: string
@@ -39,6 +40,7 @@ export interface User {
   created_at: string | null
   roles?: Role[]
   is_super_admin?: boolean
+  client?: { id: string; name: string } | null
 
 
 }
@@ -192,6 +194,7 @@ export interface TechnicalResponsible {
   registration_status: string
   active: boolean
   projects_count?: number
+  user?: { id: string; name: string; email: string } | null
 
 
 }
@@ -342,7 +345,7 @@ export interface HomologationProcess {
   status_label: string
   stage_code?: string
   priority?: string
-  allowed_transitions: Array<Option<string> & { stage_type?: ProcessStatus }>
+  allowed_transitions: Array<Option<string> & { stage_type?: ProcessStatus; available?: boolean; reasons?: string[] }>
   editable: boolean
   protocol_number: string | null
   due_date: string | null

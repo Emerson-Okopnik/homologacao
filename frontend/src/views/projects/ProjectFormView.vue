@@ -104,13 +104,13 @@ watch(
   () => [sourceRequest.value, lookups.value] as const,
   ([r, l]) => {
     if (!r || !l || items.value.length) return
-    const match = (brand: string, model: string) =>
+    const match = (type: Equipment['type'], brand: string, model: string) =>
       allEquipment.value.find(
-        (e) => e.manufacturer.toLowerCase() === brand.trim().toLowerCase() && e.model.toLowerCase() === model.trim().toLowerCase(),
+        (e) => e.type === type && e.manufacturer.toLowerCase() === brand.trim().toLowerCase() && e.model.toLowerCase() === model.trim().toLowerCase(),
       )
     const declared = [
-      ...r.system.modules.map((m) => ({ eq: match(m.brand, m.model), quantity: m.quantity })),
-      ...r.system.inverters.map((i) => ({ eq: match(i.brand, i.model), quantity: i.quantity })),
+      ...r.system.modules.map((m) => ({ eq: match('module', m.brand, m.model), quantity: m.quantity })),
+      ...r.system.inverters.map((i) => ({ eq: match('inverter', i.brand, i.model), quantity: i.quantity })),
     ]
     items.value = declared.filter((d) => d.eq).map((d) => ({ id: d.eq!.id, quantity: String(d.quantity ?? 1) }))
   },
@@ -168,7 +168,7 @@ watch(
     units.value = uniqueById([...units.value.filter((u) => u.client?.id === clientId), ...fetched])
     if (!form.consumer_unit_id && units.value.length === 1) form.consumer_unit_id = units.value[0]!.id
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 )
 
 const clientOptions = computed(() =>

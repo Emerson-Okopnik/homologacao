@@ -10,6 +10,7 @@ withDefaults(
     title: string
     submitLabel?: string
     submitting?: boolean
+    submitDisabled?: boolean
     error?: ApiError | null
     size?: 'md' | 'lg' | 'xl'
   }>(),
@@ -51,7 +52,7 @@ defineExpose({ close: () => dialog.value?.close() })
 
       <footer class="flex justify-end gap-2 border-t border-line px-6 py-4">
         <BaseButton variant="secondary" @click="dialog?.close()">Cancelar</BaseButton>
-        <BaseButton type="submit" :loading="submitting">{{ submitLabel }}</BaseButton>
+        <BaseButton type="submit" :loading="submitting" :disabled="submitDisabled">{{ submitLabel }}</BaseButton>
       </footer>
     </form>
   </dialog>

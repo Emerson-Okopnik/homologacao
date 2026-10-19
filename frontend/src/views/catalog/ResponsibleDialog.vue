@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import FormField from '@/components/ui/FormField.vue'
 import SelectField from '@/components/ui/SelectField.vue'
+import InlineAlert from '@/components/ui/InlineAlert.vue'
+import { useApiQuery } from '@/composables/useApiQuery'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import type { TechnicalResponsible } from '@/types/api'
 
@@ -10,6 +12,7 @@ const props = defineProps<{ item: TechnicalResponsible | null }>()
 const emit = defineEmits<{ close: []; saved: [item: TechnicalResponsible] }>()
 
 const form = reactive({
+  user_id: props.item?.user?.id ?? '',
   name: props.item?.name ?? '',
   cpf: props.item?.cpf ?? '',
   council: props.item?.council ?? 'CREA',
@@ -22,11 +25,20 @@ const form = reactive({
 })
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
+const { data: users, error: usersError, loading: usersLoading } = useApiQuery(
+  () => 1,
+  () => api<{ data: Array<{ id: string; name: string; email: string }> }>('/technical-responsibles/users'),
+)
+const userOptions = computed(() => {
+  const list = new Map((users.value?.data ?? []).map(user => [user.id, user]))
+  if (props.item?.user && !list.has(props.item.user.id)) list.set(props.item.user.id, props.item.user)
+  return [...list.values()].map(user => ({ value: user.id, label: `${user.name} · ${user.email}` }))
+})
 
 async function submit() {
   submitting.value = true
   error.value = null
-  const body = { ...form, state: form.state.toUpperCase() }
+  const body = { ...form, user_id: form.user_id || null, state: form.state.toUpperCase() }
   try {
     const result = props.item
       ? await api<{ data: TechnicalResponsible }>(`/technical-responsibles/${props.item.id}`, { method: 'PUT', body })
@@ -49,6 +61,16 @@ async function submit() {
     @submit="submit"
   >
     <FormField v-model="form.name" label="Nome" required :error="error?.firstError('name')" />
+    <InlineAlert v-if="usersError" :correlation-id="usersError.correlationId">{{ usersError.message }}</InlineAlert>
+    <SelectField
+      v-model="form.user_id"
+      label="Usuário do sistema"
+      :options="userOptions"
+      placeholder="Sem usuário vinculado"
+      :disabled="usersLoading || Boolean(usersError)"
+      :error="error?.firstError('user_id')"
+      hint="Selecione a conta que o RT usa para entrar no sistema. Esse vínculo é necessário para atribuir solicitações."
+    />
     <FormField v-model="form.cpf" label="CPF" hint="Obrigatório para validar o dossiê de homologação." :error="error?.firstError('cpf')" />
     <div class="grid gap-4 sm:grid-cols-[7rem_1fr_5rem]">
       <SelectField

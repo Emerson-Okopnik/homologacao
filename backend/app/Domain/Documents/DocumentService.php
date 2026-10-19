@@ -38,7 +38,7 @@ final class DocumentService
                     if ($process->status->isTerminal()) {
                         throw new DomainException('Processo encerrado não aceita novos documentos.', 'process_closed');
                     }
-                    if (! $process->status->isEditable() && ! in_array($metadata['document_type'], ['comprovante_envio', 'orcamento_conexao', 'relatorio_vistoria', 'evidencia_conexao', 'outro'], true)) {
+                    if (! $process->status->isEditable() && ! in_array(DocumentTypes::legacy($metadata['document_type']), ['comprovante_envio', 'orcamento_conexao', 'relatorio_vistoria', 'evidencia_conexao', 'outro'], true)) {
                         throw new DomainException('Retorne o processo à preparação para substituir documentos do dossiê.', 'process_locked');
                     }
                 } else {

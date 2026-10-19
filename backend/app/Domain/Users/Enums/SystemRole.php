@@ -31,14 +31,14 @@ enum SystemRole: string
     }
 
     /**
-     * @return list<PermissionKey>
+     * @return list<P>
      */
     public function defaultPermissions(): array
     {
         $read = [P::DashboardView, P::ClientsView, P::ProjectsView, P::DocumentsView, P::HomologationsView];
 
         return match ($this) {
-            self::Administrator => array_values(array_filter(P::cases(), fn (P $p) => $p !== P::PortalAccess)),
+            self::Administrator => array_filter(P::cases(), fn (P $p) => $p !== P::PortalAccess),
             self::Client => [P::PortalAccess],
             self::Homologator => [...$read, P::ClientsManage, P::TechnicalResponsiblesManage, P::ProjectsManage,
                 P::DocumentsManage, P::HomologationsManage],

@@ -14,7 +14,7 @@ final class UpdateUser
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{name?: string, email?: string, password?: string, active?: bool}  $data
+     * @param  array{name?: string, email?: string, password?: string, active?: bool, client_id?: string|null}  $data
      * @param  list<string>|null  $roleSlugs  null = não alterar perfis
      */
     public function handle(User $actor, User $user, array $data, ?array $roleSlugs): User
@@ -35,7 +35,8 @@ final class UpdateUser
                 throw new DomainException('O tenant precisa manter ao menos um administrador ativo.', 'last_admin');
             }
 
-            $user->fill($data)->save();
+            $attributes = app(UserClientLink::class)->normalize($data, $roleSlugs ?? $user->roles->pluck('slug')->all(), $user);
+            $user->fill($attributes)->save();
 
             if ($roleSlugs !== null) {
                 $before = $user->roles->pluck('slug')->sort()->values()->all();
@@ -49,7 +50,7 @@ final class UpdateUser
 
             $user->flushPermissionCache();
 
-            return $user->load('roles');
+            return $user->load('roles', 'client');
         });
     }
 

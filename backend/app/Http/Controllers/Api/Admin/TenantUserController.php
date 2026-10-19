@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Domain\Audit\AuditLogger;
+use App\Domain\Clients\Models\Client;
 use App\Domain\Tenancy\Models\Tenant;
 use App\Domain\Tenancy\TenantContext;
 use App\Domain\Users\Actions\CreateUser;
+use App\Domain\Users\Actions\UserClientLink;
 use App\Domain\Users\Models\Role;
 use App\Domain\Users\Models\User;
 use App\Http\Controllers\Controller;
@@ -34,7 +36,7 @@ final class TenantUserController extends Controller
         ]);
 
         $users = $this->context->run($tenant, fn () => User::query()
-            ->with('roles')
+            ->with('roles', 'client')
             ->when($validated['search'] ?? null, function ($q, string $search): void {
                 $term = '%'.addcslashes(mb_strtolower($search), '%_\\').'%';
                 $q->where(fn ($w) => $w->whereRaw('lower(name) like ?', [$term])->orWhereRaw('lower(email) like ?', [$term]));
@@ -55,11 +57,12 @@ final class TenantUserController extends Controller
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', Password::min(10)->letters()->numbers()->mixedCase()],
             'roles' => ['required', 'array', 'min:1'],
+            'client_id' => ['sometimes', 'nullable', 'uuid'],
             'roles.*' => ['string', 'distinct', Rule::exists('roles', 'slug')->where('tenant_id', $tenant->id)],
         ], [], ['name' => 'nome', 'email' => 'e-mail', 'password' => 'senha', 'roles' => 'perfis']);
 
         $user = $this->context->run($tenant, fn () => $createUser->handle(
-            ['name' => $data['name'], 'email' => $data['email'], 'password' => $data['password'], 'active' => true],
+            ['name' => $data['name'], 'email' => $data['email'], 'password' => $data['password'], 'active' => true, ...array_intersect_key($data, array_flip(['client_id']))],
             $data['roles'],
         ));
 
@@ -71,6 +74,7 @@ final class TenantUserController extends Controller
         $data = $request->validate([
             'active' => ['sometimes', 'boolean'],
             'is_super_admin' => ['sometimes', 'boolean'],
+            'client_id' => ['sometimes', 'nullable', 'uuid'],
             'roles' => ['sometimes', 'array', 'min:1'],
             'roles.*' => ['string', 'distinct', Rule::exists('roles', 'slug')->where('tenant_id', $tenant->id)],
         ], [], ['active' => 'status', 'roles' => 'perfis', 'is_super_admin' => 'super admin']);
@@ -79,6 +83,7 @@ final class TenantUserController extends Controller
 
         $updated = $this->context->run($tenant, fn () => DB::transaction(function () use ($data, $user, $actor): User {
             $model = User::query()->with('roles')->where('uuid', $user)->firstOrFail();
+            $link = app(UserClientLink::class)->normalize($data, $data['roles'] ?? $model->roles->pluck('slug')->all(), $model);
             $isSelf = $actor?->is($model) ?? false;
 
             if ($isSelf && ($data['active'] ?? true) === false) {
@@ -99,7 +104,7 @@ final class TenantUserController extends Controller
                     ['is_super_admin' => ! $data['is_super_admin']], ['is_super_admin' => $data['is_super_admin']]);
             }
 
-            $model->save();
+            $model->fill(['client_id' => $link['client_id']])->save();
 
             if (array_key_exists('roles', $data)) {
                 $old = $model->roles->pluck('slug')->sort()->values()->all();
@@ -113,9 +118,17 @@ final class TenantUserController extends Controller
                 }
             }
 
-            return $model->load('roles');
+            $model->flushPermissionCache();
+
+            return $model->load('roles', 'client');
         }));
 
         return new UserResource($updated);
+    }
+
+    public function clients(Tenant $tenant): JsonResponse
+    {
+        return $this->context->run($tenant, fn () => response()->json(['data' => Client::query()->orderBy('name')->get(['uuid', 'name', 'document'])
+            ->map(fn ($client) => ['id' => $client->uuid, 'name' => $client->name, 'document' => $client->document])]));
     }
 }

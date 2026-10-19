@@ -4,12 +4,14 @@ import { RouterLink } from 'vue-router'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import ProjectDocumentsPanel from '@/views/documents/ProjectDocumentsPanel.vue'
+import DocumentUploadDialog from '@/views/documents/DocumentUploadDialog.vue'
+import ReviewDialog from './ReviewDialog.vue'
 import TrackingActionDialog from './TrackingActionDialog.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api, buildUrl, toApiError, type ApiError } from '@/lib/http'
 import { formatDateTime, formatNumber } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
-import type { HomologationProcess } from '@/types/api'
+import type { HomologationProcess, ProcessDocument } from '@/types/api'
 import type { Tracking, ProjectTechnicalResponse, Submission } from '@/types/homologation'
 const props = defineProps<{ process: HomologationProcess; revision: number }>()
 const emit = defineEmits<{ saved: [] }>()
@@ -39,6 +41,19 @@ const labels: Record<string, string> = {
   assisted_inspection: 'Vistoria registrada',
 }
 const canManage = computed(() => auth.can('homologations.manage'))
+const canUploadReport = computed(() => auth.can('documents.manage') && !['conectado', 'cancelado'].includes(props.process.status))
+const uploadingReport = ref(false)
+const reviewingReport = ref<ProcessDocument | null>(null)
+const reports = computed(() => (data.value?.documents ?? []).filter(doc => doc.is_current && ['relatorio_vistoria', 'INSPECTION_REPORT'].includes(doc.document_type)))
+function reportUploaded(document: ProcessDocument) {
+  uploadingReport.value = false
+  reviewingReport.value = document
+  emit('saved')
+}
+function reportReviewed() {
+  reviewingReport.value = null
+  emit('saved')
+}
 const portal = computed(() => {
   const url = data.value?.external?.portal_url ?? props.process.distributor?.portal_url
   return url && /^https?:\/\//i.test(url) ? url : null
@@ -170,15 +185,28 @@ async function download(submission: Submission) {
         </ul>
       </details>
       <section v-if="data.inspections.length || ['aprovado', 'vistoria_solicitada', 'conectado'].includes(process.status)" class="rounded-2xl border border-line bg-surface p-5">
-        <header class="mb-3 flex justify-between">
+        <header class="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 class="font-semibold">Vistorias e conexão</h2>
-          <BaseButton
-            v-if="canManage && data.submissions.some((s) => s.kind === 'inspection' && s.status === 'sent')"
-            variant="secondary"
-            @click="dialog = { action: 'inspection' }"
-            >Registrar vistoria</BaseButton
-          >
+          <div class="flex flex-wrap gap-2">
+            <BaseButton v-if="canUploadReport" variant="secondary" @click="uploadingReport = true">Anexar relatório</BaseButton>
+            <BaseButton
+              v-if="canManage && data.submissions.some((s) => s.kind === 'inspection' && s.status === 'sent')"
+              variant="secondary"
+              @click="dialog = { action: 'inspection' }"
+              >Registrar vistoria</BaseButton
+            >
+          </div>
         </header>
+        <p class="mb-3 text-sm text-muted">Para registrar a vistoria como realizada, anexe e aprove o relatório e informe a data de realização.</p>
+        <ul v-if="reports.length" class="mb-4 space-y-2 rounded-xl border border-line p-3 text-sm">
+          <li v-for="report in reports" :key="report.id" class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ report.original_name }} · {{ report.review_status === 'aprovado' ? 'Relatório aprovado' : report.review_status === 'reprovado' ? 'Relatório reprovado' : 'Aguardando revisão' }}</span>
+            <div class="flex items-center gap-3">
+              <a :href="buildUrl(`/documents/${report.id}/download`)" target="_blank" rel="noopener" class="text-primary">Abrir relatório</a>
+              <BaseButton v-if="report.review_status === 'pendente' && canUploadReport" variant="ghost" @click="reviewingReport = report">Revisar relatório</BaseButton>
+            </div>
+          </li>
+        </ul>
         <p v-if="!data.inspections.length" class="text-sm text-muted">Nenhuma vistoria registrada.</p>
         <ul class="text-sm">
           <li v-for="i in data.inspections" :key="i.id" class="flex items-center justify-between gap-3 py-3">
@@ -234,6 +262,8 @@ async function download(submission: Submission) {
         @close="dialog = null"
         @saved="saved"
       />
+      <DocumentUploadDialog v-if="uploadingReport" :endpoint="`/processes/${process.id}/documents`" initial-type="INSPECTION_REPORT" fixed-type @close="uploadingReport = false" @saved="reportUploaded" />
+      <ReviewDialog v-if="reviewingReport" :document="reviewingReport" @close="reviewingReport = null" @saved="reportReviewed" />
     </template>
   </div>
 </template>

@@ -59,6 +59,50 @@ describe('cadastro de equipamentos', () => {
 })
 
 describe('cadastro de projetos', () => {
+  it('preserva a UC da solicitação com várias UCs e distingue módulos de inversores ao converter', async () => {
+    const client = { id: 'client-1', name: 'Cliente teste', document: null }
+    const units = ['unit-1', 'unit-2'].map((id, index) => ({
+      id, number: String(index + 1), client, distributor: { name: 'Distribuidora teste' }, address: { city: 'São Paulo', state: 'SP' },
+    }))
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const path = String(url).split('?')[0]
+      if (path === '/api/clients') return response([client])
+      if (path === '/api/consumer-units') return response(units)
+      if (path === '/api/technical-responsibles') return response([{ id: 'rt-1', name: 'Engenheiro', council: 'CREA', registration: '123' }])
+      if (path === '/api/equipment') return response([
+        { id: 'module-1', type: 'module', manufacturer: 'Teste', model: 'Mesmo modelo', power_w: 550 },
+        { id: 'inverter-1', type: 'inverter', manufacturer: 'Teste', model: 'Mesmo modelo', power_w: 5000 },
+      ])
+      if (path === '/api/client-requests/request-1') return response({
+        id: 'request-1', code: 'SOL-001', client, consumer_unit: units[1], technical_responsible: { id: 'rt-1' },
+        system: { compensation_mode: 'LOCAL_SELF_CONSUMPTION', has_battery: false,
+          modules: [{ brand: 'Teste', model: 'Mesmo modelo', quantity: 10 }],
+          inverters: [{ brand: 'Teste', model: 'Mesmo modelo', quantity: 1 }] },
+      })
+      if (path === '/api/projects' && init?.method === 'POST') return response({ id: 'project-1', process: { id: 'process-1' } }, 201)
+      throw new Error(`Requisição inesperada: ${url}`)
+    })
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      { path: '/projetos/novo', component: ProjectFormView },
+      { path: '/processos/:id', component: { template: '<div>Processo criado</div>' } },
+      { path: '/projetos', component: { template: '<div />' } },
+    ] })
+    await router.push('/projetos/novo?solicitacao=request-1')
+    const wrapper = mount(RouterView, { global: { plugins: [createPinia(), router] } })
+    await flushPromises()
+    const unitField = wrapper.findAllComponents(SelectField).find(field => String(field.props('label')).includes('Unidade consumidora'))!
+    expect(unitField.get('select').element.value).toBe('unit-2')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/projects' && init?.method === 'POST')!
+    expect(JSON.parse(String(request[1]?.body))).toMatchObject({
+      client_request_id: 'request-1', client_id: 'client-1', consumer_unit_id: 'unit-2',
+      project_rt: { id: 'rt-1' }, execution_rt: { id: 'rt-1' },
+      equipment: [{ id: 'module-1', quantity: 10 }, { id: 'inverter-1', quantity: 1 }],
+    })
+    expect(router.currentRoute.value.path).toBe('/processos/process-1')
+  })
+
   it('calcula as potências do catálogo, envia as quantidades e abre o processo criado', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       const path = String(url).split('?')[0]

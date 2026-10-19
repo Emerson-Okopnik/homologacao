@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\Homologation;
 use App\Domain\Catalog\Models\EquipmentItem;
 use App\Domain\Documents\DocumentService;
 use App\Domain\Documents\DocumentTypes;
-use App\Domain\Documents\DocumentUploader;
 use App\Domain\Documents\Models\Document;
 use App\Domain\Documents\Models\DocumentLink;
 use App\Domain\Documents\Models\ProcessDocument;
@@ -13,6 +12,7 @@ use App\Domain\Homologations\Models\ConnectionEvent;
 use App\Domain\Homologations\Models\HomologationProcess;
 use App\Domain\Homologations\Models\Inspection;
 use App\Domain\Homologations\Models\ProjectExecution;
+use App\Domain\Homologations\TimelineRecorder;
 use App\Domain\Projects\Models\SolarProject;
 use App\Domain\Shared\Exceptions\DomainException;
 use App\Http\Controllers\Controller;
@@ -43,7 +43,6 @@ final class DocumentController extends Controller
 
     public function __construct(
         private readonly TimelineRecorder $timeline,
-        private readonly DocumentUploader $uploader,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
@@ -122,24 +121,14 @@ final class DocumentController extends Controller
         $data = $request->validate([
             'document_type' => ['required', Rule::in(array_keys(DocumentTypes::TYPES))],
             'file' => ['required', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png'],
-        ]);
-
-        $this->assertCanAttach($type, $owner);
-
-        $document = DB::transaction(function () use ($type, $owner, $data, $request): Document {
-            $document = $this->uploader->upload($type, $owner, $data['document_type'], $request->file('file'), $request->user()->id);
-
-            if ($process = $this->processOf($type, $owner)) {
-                $this->timeline->record($process, 'DOCUMENT_UPLOADED',
-                    DocumentTypes::label($data['document_type'])." v{$document->version} enviado", $document->original_name);
-            }
-
-            return $document;
-        });
             'issued_at' => ['nullable', 'date', 'before_or_equal:today'], 'expires_at' => ['nullable', 'date', 'after_or_equal:issued_at'],
         ]);
 
         $document = app(DocumentService::class)->upload($project, $process, $request->file('file'), $request->user(), $data);
+        if ($target = $process ?? $project->process) {
+            $this->timeline->record($target, 'DOCUMENT_UPLOADED',
+                DocumentTypes::label($data['document_type'])." v{$document->version} enviado", $document->original_name);
+        }
 
         return DocumentResource::make($document->refresh()->load(['uploader', 'reviewer']))->response()->setStatusCode(201);
     }

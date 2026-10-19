@@ -193,7 +193,7 @@ final class ExternalTrackingController extends Controller
             throw new DomainException('Informe a data agendada.', 'inspection_date_required');
         }
         $document = ! empty($data['report_document_id']) ? $this->integration->document($process, $data['report_document_id'], 'relatorio_vistoria') : null;
-        if ($data['status'] === 'aprovada' && ! $document?->isValid()) {
+        if (in_array($data['status'], ['realizada', 'aprovada', 'reprovada'], true) && (! $document?->isValid() || ! $document->verifyHash())) {
             throw new DomainException('Aprove o relatório da vistoria.', 'inspection_report_required');
         }
         $attributes = [...$data, 'external_process_id' => $external->id, 'submission_id' => $submission->id, 'report_document_id' => $document?->id];

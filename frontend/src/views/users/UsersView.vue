@@ -95,6 +95,9 @@ function onSearch() {
               <td class="px-4 py-3">
                 <p class="font-medium">{{ user.name }}</p>
                 <p class="text-xs text-muted">{{ user.email }}</p>
+                <p v-if="user.roles?.some(role => role.slug === 'cliente' || role.permissions?.includes('portal.access'))" class="mt-1 text-xs" :class="user.client ? 'text-muted' : 'text-danger'">
+                  {{ user.client ? `Titular: ${user.client.name}` : 'Titular não vinculado · edite o usuário para liberar o portal' }}
+                </p>
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap gap-1">

@@ -292,7 +292,9 @@ final class PortalController extends Controller
         if (($system['compensation_mode'] ?? null) === CompensationMode::LocalSelfConsumption->value) {
             $system['beneficiaries'] = [];
         }
-        $total = collect($system['beneficiaries'] ?? [])->sum(fn ($b) => (float) ($b['percentage'] ?? 0));
+        /** @var list<array{percentage?: float|null}> $beneficiaries */
+        $beneficiaries = $system['beneficiaries'] ?? [];
+        $total = collect($beneficiaries)->sum(fn ($b) => (float) ($b['percentage'] ?? 0));
         if ($total > 100.0001) {
             throw new DomainException('A soma dos percentuais das UCs beneficiárias não pode passar de 100%.', 'allocation_over_100');
         }

@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 final class TechnicalResponsibleController extends Controller
 {
@@ -25,6 +26,7 @@ final class TechnicalResponsibleController extends Controller
         ]);
 
         $items = TechnicalResponsible::query()
+            ->with('user')
             ->withCount('projects')
             ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where(fn ($w) => $w
                 ->where('name', 'ilike', "%{$s}%")->orWhere('registration', 'like', "%{$s}%")))
@@ -33,6 +35,14 @@ final class TechnicalResponsibleController extends Controller
             ->paginate(50);
 
         return TechnicalResponsibleResource::collection($items);
+    }
+
+    public function users(): JsonResponse
+    {
+        $this->authorize('technical_responsibles.manage');
+
+        return response()->json(['data' => User::query()->technicalStaff()->orderBy('name')->get(['uuid', 'name', 'email'])
+            ->map(fn ($user) => ['id' => $user->uuid, 'name' => $user->name, 'email' => $user->email])]);
     }
 
     public function store(Request $request): JsonResponse
@@ -64,7 +74,7 @@ final class TechnicalResponsibleController extends Controller
         }
 
         $data = $request->validate([
-            'user_id' => ['nullable', 'uuid'],
+            'user_id' => ['sometimes', 'nullable', 'uuid'],
             'name' => ['required', 'string', 'max:200'],
             'cpf' => ['nullable', 'digits:11', function ($attribute, $value, $fail) {
                 if (! TaxDocument::isValid('PF', $value)) {
@@ -88,16 +98,16 @@ final class TechnicalResponsibleController extends Controller
         ], ['registration.unique' => 'Já existe um responsável com este registro neste conselho/UF.']);
 
         // O RT é um funcionário: só usuários internos (sem vínculo de cliente) do tenant.
-        if (! empty($data['user_id'])) {
-            $user = User::query()
-                ->where('tenant_id', app(TenantContext::class)->id())
-                ->whereNull('client_id')
-                ->where('uuid', $data['user_id'])
-                ->first();
-            abort_unless($user, 422, 'Usuário inválido para responsável técnico.');
-            $data['user_id'] = $user->id;
-        } else {
-            $data['user_id'] = null;
+        if (array_key_exists('user_id', $data)) {
+            if (filled($data['user_id'])) {
+                $user = User::query()->technicalStaff()->where('uuid', $data['user_id'])->first();
+                if (! $user) {
+                    throw ValidationException::withMessages(['user_id' => 'Selecione um usuário interno ativo com permissão para trabalhar em projetos.']);
+                }
+                $data['user_id'] = $user->id;
+            } else {
+                $data['user_id'] = null;
+            }
         }
 
         return $data;

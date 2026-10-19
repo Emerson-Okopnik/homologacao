@@ -5,8 +5,9 @@ import FormField from '@/components/ui/FormField.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api, upload, toApiError, type ApiError } from '@/lib/http'
-const props = defineProps<{ endpoint: string; initialType?: string; initialFile?: File; owner?: { type: string; id: string } }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+import type { ProcessDocument } from '@/types/api'
+const props = defineProps<{ endpoint: string; initialType?: string; initialFile?: File; fixedType?: boolean; owner?: { type: string; id: string } }>()
+const emit = defineEmits<{ close: []; saved: [document: ProcessDocument] }>()
 const type = ref(props.initialType ?? 'outro')
 const issued = ref(''),
   expires = ref(''),
@@ -30,8 +31,8 @@ async function submit() {
     if (file.value) form.append('file', file.value)
     if (issued.value) form.append('issued_at', issued.value)
     if (expires.value) form.append('expires_at', expires.value)
-    await upload(props.endpoint, form)
-    emit('saved')
+    const result = await upload<{ data: ProcessDocument }>(props.endpoint, form)
+    emit('saved', result.data)
   } catch (e) {
     error.value = toApiError(e)
   } finally {
@@ -41,7 +42,7 @@ async function submit() {
 </script>
 <template>
   <BaseDialog title="Adicionar documento" :submitting="submitting" :error="error" @submit="submit" @close="emit('close')">
-    <SelectField v-model="type" label="Tipo de documento" :options="types ?? []" :error="error?.firstError('document_type')" />
+    <SelectField v-model="type" label="Tipo de documento" :options="types ?? []" :disabled="fixedType" :error="error?.firstError('document_type')" />
     <label class="flex flex-col gap-2 text-sm"
       >Arquivo (PDF, JPG ou PNG, até 20 MB)
       <input type="file" accept=".pdf,.jpg,.jpeg,.png" @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null" />
