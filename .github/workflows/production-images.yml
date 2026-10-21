@@ -1,0 +1,71 @@
+name: Validate production images
+
+# Manual: compiling PHP extensions under ARM64 emulation can take several minutes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and smoke test ${{ matrix.target }} (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [app, web]
+        arch: [amd64, arm64]
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+      IMAGE_TAG: homologa-ci:${{ matrix.target }}-${{ matrix.arch }}
+      TARGET_PLATFORM: linux/${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Enable ARM64 emulation
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build production target without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: ${{ matrix.target }}
+          platforms: ${{ env.TARGET_PLATFORM }}
+          tags: ${{ env.IMAGE_TAG }}
+          push: false
+          load: true
+          cache-from: type=gha,scope=production-${{ matrix.target }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=production-${{ matrix.target }}-${{ matrix.arch }}
+      - name: Check app entrypoint, Laravel caches and PHP extensions
+        if: matrix.target == 'app'
+        run: |
+          docker run --rm --network none --platform "$TARGET_PLATFORM" \
+            --env APP_ENV=production \
+            --env APP_DEBUG=false \
+            --env APP_KEY=base64:dGVzdGluZy1rZXktaG9tb2xvZ2Etc29sYXItMzJiISE= \
+            --env DB_USERNAME=homologa_app \
+            --env DB_HOST=db \
+            --env CACHE_STORE=array \
+            --env SESSION_DRIVER=array \
+            --env QUEUE_CONNECTION=sync \
+            "$IMAGE_TAG" composer check-platform-reqs --no-dev
+      - name: Check the mounted Caddyfile syntax
+        if: matrix.target == 'web'
+        run: |
+          docker run --rm --network none --platform "$TARGET_PLATFORM" \
+            --volume "$PWD/infra/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            --env API_DOMAIN=api.example.com \
+            --env ACME_EMAIL=infra@example.com \
+            "$IMAGE_TAG" caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null

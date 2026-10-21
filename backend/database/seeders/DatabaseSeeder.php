@@ -11,6 +11,7 @@ use App\Domain\Users\Enums\SystemRole;
 use App\Domain\Users\Models\Role;
 use App\Domain\Users\Models\User;
 use Illuminate\Database\Seeder;
+use RuntimeException;
 
 /**
  * Dados DEMONSTRATIVOS para desenvolvimento local. Não representam usuários reais
@@ -18,8 +19,15 @@ use Illuminate\Database\Seeder;
  */
 class DatabaseSeeder extends Seeder
 {
-    public function run(ProvisionTenantRoles $provisionRoles, TenantContext $context): void
+    public function run(): void
     {
+        if (app()->isProduction()) {
+            throw new RuntimeException('DatabaseSeeder bloqueado em produção: cria contas demonstrativas com senhas conhecidas. Utilize apenas seeders específicos revisados para produção.');
+        }
+
+        $provisionRoles = app(ProvisionTenantRoles::class);
+        $context = app(TenantContext::class);
+
         $tenant = Tenant::query()->firstOrCreate(
             ['slug' => 'demo-solar'],
             ['name' => 'Demo Solar Engenharia', 'active' => true],

@@ -33,6 +33,12 @@ export function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null
 }
 
+function backendRoot(): string {
+  // Aceita o origin da API ou sua URL com /api, sem duplicar o prefixo.
+  const configured = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '/api'
+  return configured.replace(/\/api$/, '')
+}
+
 export function buildUrl(path: string, query?: Query): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query ?? {})) {
@@ -40,12 +46,19 @@ export function buildUrl(path: string, query?: Query): string {
     params.set(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
   }
   const qs = params.toString()
-  return `/api${path}${qs ? `?${qs}` : ''}`
+  const endpoint = path.replace(/^\/+/, '').replace(/^api(?:\/|$)/, '')
+  return `${backendRoot()}/api${endpoint ? `/${endpoint}` : ''}${qs ? `?${qs}` : ''}`
 }
 
 async function ensureCsrfCookie(): Promise<void> {
   if (readCookie('XSRF-TOKEN')) return
-  await fetch('/sanctum/csrf-cookie', { credentials: 'include' })
+  const response = await fetch(`${backendRoot()}/sanctum/csrf-cookie`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, messageForStatus(response.status), {}, response.headers.get('X-Correlation-Id'))
+  }
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {

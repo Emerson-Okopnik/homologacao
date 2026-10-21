@@ -8,6 +8,18 @@ __v0_jsx-dev-runtime.ts
 
 # Environment variables
 .env*.local
+/.env
+/.env.production
+/.env.app
+/.env.db
+/.env.web
+/secrets/
+/data/
+/backups/
+/restore-verificacao/
+*.agekey
+*.dump
+*.tar.gz.age
 
 # Homologa Solar
 backend/vendor/
@@ -24,3 +36,5 @@ frontend/playwright-report/
 node_modules
 .next/
 .DS_Store
+__pycache__/
+*.py[cod]
