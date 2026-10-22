@@ -1,6 +1,6 @@
 # Homologa Solar
 
-API Laravel em `backend/` e aplicação Vue/Vite em `frontend/`. Os arquivos Next.js na raiz não são o frontend deste sistema.
+API Laravel em `backend/` e aplicação Vue/Vite em `frontend/`.
 
 O `docker-compose.yml` atende ao desenvolvimento local. A implantação Oracle ARM64 usa o arquivo **independente** `compose.production.yaml`, PostgreSQL 17, Redis e Caddy com HTTPS. O frontend é publicado separadamente na Cloudflare Pages.
 

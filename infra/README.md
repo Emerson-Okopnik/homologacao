@@ -88,7 +88,7 @@ Somente `storage/app/public` é acessível por `/storage/`; documentos em `app/p
 | Variável de build | `VITE_API_URL=https://api.SEU_DOMINIO/api` |
 | Custom domain | `app.SEU_DOMINIO` |
 
-Use instalação com `pnpm install --frozen-lockfile` quando o pipeline for manual. Não execute o build Next.js da raiz. Toda variável `VITE_*` é pública e exige novo build quando muda. Cadastre o domínio próprio na Pages e configure o DNS; teste acesso direto a uma rota profunda da SPA. Previews devem usar homologação com um domínio compatível com a estratégia de cookies.
+Use instalação com `pnpm install --frozen-lockfile` quando o pipeline for manual. Toda variável `VITE_*` é pública e exige novo build quando muda. Cadastre o domínio próprio na Pages e configure o DNS; teste acesso direto a uma rota profunda da SPA. Previews devem usar homologação com um domínio compatível com a estratégia de cookies.
 
 Valide login/logout, expiração/CSRF, recuperação de senha com SMTP real, upload/download, duas contas de tenants diferentes e operações principais no navegador usando os domínios finais. CORS permite somente `FRONTEND_URL` em produção. Não habilite proxy adicional da API sem ajustar TLS, IP real e proxies confiáveis.
 
