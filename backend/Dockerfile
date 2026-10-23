@@ -1,9 +1,10 @@
 # Build nativo na A1 ou docker buildx build --platform linux/arm64.
-FROM php:8.4-fpm-bookworm AS app
+FROM php:8.5.12-fpm-bookworm AS app
 
+# OPcache já integra o PHP 8.5; não compilar como extensão compartilhada.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git unzip libpq-dev libicu-dev libzip-dev \
-    && docker-php-ext-install -j2 pdo_pgsql pgsql intl zip bcmath pcntl opcache \
+    && docker-php-ext-install -j2 pdo_pgsql pgsql intl zip bcmath pcntl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer

@@ -6,7 +6,7 @@ x-php-app: &php-app
     args:
       UID: ${UID:-1000}
       GID: ${GID:-1000}
-  image: homologa-solar/php:8.4
+  image: homologa-solar/php:8.5.12
   working_dir: /var/www/backend
   volumes:
     - ./backend:/var/www/backend

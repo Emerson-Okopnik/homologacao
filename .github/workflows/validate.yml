@@ -62,7 +62,7 @@ jobs:
           VITE_API_URL: https://api.example.com/api
 
   backend:
-    name: PHP 8.4 tests with PostgreSQL 17
+    name: PHP 8.5.12+ tests with PostgreSQL 17
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -101,12 +101,14 @@ jobs:
           persist-credentials: false
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.4"
+          php-version: "8.5"
           extensions: bcmath, curl, dom, fileinfo, intl, mbstring, pcntl, pdo_pgsql, pgsql, zip
           coverage: none
           tools: composer:v2
         env:
           update: true
+      - name: Require the patched PHP 8.5 runtime
+        run: php -r 'if (PHP_MAJOR_VERSION !== 8 || PHP_MINOR_VERSION !== 5 || version_compare(PHP_VERSION, "8.5.12", "<")) { fwrite(STDERR, "PHP 8.5.12 or newer in the 8.5 branch is required.\n"); exit(1); } echo "PHP ", PHP_VERSION, PHP_EOL;'
       - name: Prepare Laravel writable directories
         run: mkdir -p storage/app/private storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache resources/views
       - name: Validate Composer configuration

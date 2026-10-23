@@ -2,6 +2,8 @@
 
 Este guia implementa os arquivos do runbook no projeto. Pressupõe Ubuntu 24.04 ARM64, Docker Engine/Compose oficiais, repositório em `/opt/homologa` e uma A1 com 2 OCPUs/12 GB. Provisionamento OCI, NSG, DNS, orçamento e aceite de disponibilidade continuam sendo etapas da conta do operador.
 
+O runtime PHP foi atualizado para **8.5.12**, substituindo o exemplo PHP 8.4 do runbook/kit. As imagens usam `php:8.5.12-fpm-bookworm` em produção e `php:8.5.12-fpm-alpine` no desenvolvimento; o Composer exige `~8.5.12`. Essa versão é uma [atualização de segurança oficial](https://www.php.net/releases/8_5_12.php). O OPcache já integra o PHP 8.5 e não deve ser compilado/carregado novamente como extensão compartilhada; suas diretivas INI permanecem configuradas.
+
 ## Arquivos e serviços
 
 | Arquivo | Responsabilidade |
@@ -49,11 +51,11 @@ Execute o Compose sempre com os dois argumentos abaixo. Não combine o arquivo d
 
 ```sh
 sudo docker compose --env-file .env.production -f compose.production.yaml config --quiet
-sudo docker buildx imagetools inspect php:8.4-fpm-bookworm
+sudo docker buildx imagetools inspect php:8.5.12-fpm-bookworm
 sudo docker buildx imagetools inspect postgres:17-bookworm
 sudo docker buildx imagetools inspect caddy:2-alpine
 sudo docker buildx imagetools inspect redis:7-alpine
-sudo docker compose --env-file .env.production -f compose.production.yaml build app caddy
+sudo docker compose --env-file .env.production -f compose.production.yaml build --pull app caddy
 sudo docker compose --env-file .env.production -f compose.production.yaml up -d db redis
 sudo docker compose --env-file .env.production -f compose.production.yaml run --rm app composer check-platform-reqs --no-dev
 sudo docker compose --env-file .env.production -f compose.production.yaml run --rm app php artisan migrate --force
@@ -143,6 +145,14 @@ O dump online e a cópia de arquivos são capturas separadas. Antes de migraçã
 3. Execute `php artisan down --retry=60` na API ativa, pare o scheduler e drene/pare o worker. Confirme que integrações e requisições não continuam escrevendo e faça o backup final coordenado.
 4. Execute as migrations revisadas com `run --rm app php artisan migrate --force`. Recrie somente `app caddy worker scheduler` com `up -d --no-deps`; preserve banco/Redis/volumes.
 5. Execute `php artisan up`, teste `/ready`, login e operações críticas, e publique o frontend compatível na Pages.
+
+Ao atualizar o PHP, altere as tags APP_IMAGE/WEB_IMAGE para uma nova release e siga essa mesma sequência de backup, build com `--pull` e recriação de `app`, `worker` e `scheduler`. Reconstruir uma imagem não atualiza os contêineres já ativos. Confirme a versão após a substituição:
+
+```sh
+sudo docker compose --env-file .env.production -f compose.production.yaml exec app php --version
+sudo docker compose --env-file .env.production -f compose.production.yaml exec worker php --version
+sudo docker compose --env-file .env.production -f compose.production.yaml exec scheduler php --version
+```
 
 Mantenha a API compatível com a release anterior do frontend durante a propagação. Para falha sem alteração incompatível de schema, volte as duas imagens e a Pages às versões anteriores e recrie os processos de aplicação. Para migration destrutiva, mantenha manutenção e restaure em banco novo/isolado com avaliação da perda de dados; não use rollback automático para tentar recuperar dados removidos.
 

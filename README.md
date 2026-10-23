@@ -1,16 +1,29 @@
 # Homologa Solar
 
-API Laravel em `backend/` e aplicação Vue/Vite em `frontend/`.
+API Laravel com PHP **8.5.12** em `backend/` e aplicação Vue/Vite em `frontend/`.
 
 O `docker-compose.yml` atende ao desenvolvimento local. A implantação Oracle ARM64 usa o arquivo **independente** `compose.production.yaml`, PostgreSQL 17, Redis e Caddy com HTTPS. O frontend é publicado separadamente na Cloudflare Pages.
 
 Consulte [infra/README.md](infra/README.md) para preparação, publicação, backup, restauração e atualização. O procedimento adapta o runbook OCI-AF-01 ao código real: preserva Redis, mantém os documentos privados e usa um único scheduler.
 
+O Composer exige PHP `~8.5.12` (8.5.12 ou posterior na linha 8.5), e as imagens de desenvolvimento e produção usam a versão 8.5.12. Depois de atualizar o projeto, reconstrua e recrie os contêineres PHP: atualizar somente o PHP da máquina não altera contêineres existentes. Em desenvolvimento, com as dependências já ativas:
+
+```sh
+docker compose build --pull app
+docker compose stop app queue scheduler
+docker compose up --no-deps --no-build --force-recreate --exit-code-from php-init php-init
+docker compose up -d --no-deps --no-build --force-recreate app queue scheduler
+docker compose exec nginx nginx -s reload
+docker compose exec app php --version
+```
+
+O `php-init` deve terminar com código 0 antes de iniciar os demais serviços. O reload do Nginx atualiza o endereço do contêiner PHP recriado e evita respostas 502.
+
 ## Desenvolvimento
 
 ```sh
 cp backend/.env.example backend/.env
-docker compose build
+docker compose build --pull
 make install
 docker compose up -d
 make migrate
