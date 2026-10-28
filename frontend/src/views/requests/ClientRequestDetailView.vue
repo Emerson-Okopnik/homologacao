@@ -134,7 +134,7 @@ function reviewLabel(status: string) {
 
       <div class="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div class="flex flex-col gap-6">
-          <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5" aria-labelledby="sys">
+          <section class="flex flex-col gap-4 vg-panel p-5" aria-labelledby="sys">
             <h2 id="sys" class="font-semibold text-ink">Dados informados pelo cliente</h2>
             <dl class="grid gap-4 text-sm md:grid-cols-2">
               <div><dt class="text-muted">Titular</dt><dd class="text-ink">{{ current.client?.name }} · {{ current.client?.document }}</dd><dd class="text-muted">{{ current.client?.email }} {{ current.client?.phone }}</dd></div>
@@ -155,7 +155,7 @@ function reviewLabel(status: string) {
           </section>
 
           <div class="grid gap-6 md:grid-cols-2">
-            <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5" aria-labelledby="cli-docs">
+            <section class="flex flex-col gap-3 vg-panel p-5" aria-labelledby="cli-docs">
               <h2 id="cli-docs" class="flex items-center gap-2 text-sm font-semibold text-ink">
                 <UserRound class="size-4 text-primary" aria-hidden="true" />Obrigações do cliente
                 <span class="ml-auto tabular-nums text-muted">{{ current.client_progress.sent }}/{{ current.client_progress.required }}</span>
@@ -176,7 +176,7 @@ function reviewLabel(status: string) {
               </ul>
             </section>
 
-            <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5" aria-labelledby="rt-docs">
+            <section class="flex flex-col gap-3 vg-panel p-5" aria-labelledby="rt-docs">
               <h2 id="rt-docs" class="flex items-center gap-2 text-sm font-semibold text-ink">
                 <HardHat class="size-4 text-primary" aria-hidden="true" />Obrigações do responsável técnico
               </h2>
@@ -191,7 +191,7 @@ function reviewLabel(status: string) {
             </section>
           </div>
 
-          <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5" aria-labelledby="conv">
+          <section class="flex flex-col gap-4 vg-panel p-5" aria-labelledby="conv">
             <h2 id="conv" class="font-semibold text-ink">Conversa com o cliente</h2>
             <ol v-if="current.messages.length" class="flex flex-col gap-3">
               <li
@@ -229,7 +229,7 @@ function reviewLabel(status: string) {
         </div>
 
         <aside class="flex flex-col gap-4">
-          <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5" aria-labelledby="assign">
+          <section class="flex flex-col gap-3 vg-panel p-5" aria-labelledby="assign">
             <h2 id="assign" class="text-sm font-semibold text-ink">Responsável técnico</h2>
             <p class="text-xs text-muted">Engenheiro da equipe que assume o projeto. Ele vira o RT de projeto e execução ao converter.</p>
             <template v-if="isOpen && auth.can('projects.manage')">
@@ -248,7 +248,7 @@ function reviewLabel(status: string) {
             <p v-else class="text-sm text-muted">Não designado.</p>
           </section>
 
-          <section class="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-5 text-sm" aria-labelledby="dates">
+          <section class="flex flex-col gap-2 vg-panel p-5 text-sm" aria-labelledby="dates">
             <h2 id="dates" class="font-semibold text-ink">Datas</h2>
             <p class="flex justify-between"><span class="text-muted">Enviada</span><span class="text-ink">{{ formatDateTime(current.submitted_at ?? current.created_at) }}</span></p>
             <p class="flex justify-between"><span class="text-muted">Designada</span><span class="text-ink">{{ formatDateTime(current.assigned_at) }}</span></p>

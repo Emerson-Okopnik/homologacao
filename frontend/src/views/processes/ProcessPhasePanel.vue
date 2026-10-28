@@ -43,10 +43,10 @@ function saved() { action.value = null; uploading.value = null; emit('saved') }
 </script>
 
 <template>
-  <section class="mt-6 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-phase">
+  <section class="mt-6 rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-phase">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 id="sec-phase" class="font-semibold">{{ mode === 'requirements' ? 'Requisitos da fase' : 'Execução, vistoria e conexão' }}</h2>
-      <StatusBadge>{{ process.stage_label }}</StatusBadge>
+      <h2 id="sec-phase" class="text-sm font-semibold">{{ mode === 'requirements' ? 'Requisitos da fase' : 'Execução, vistoria e conexão' }}</h2>
+      <StatusBadge tone="info">{{ process.stage_label }}</StatusBadge>
     </div>
     <p v-if="mode === 'actions' && !['PREPARATION', 'CORRECTION'].includes(process.stage)" class="mt-2 text-sm text-muted">Obra de rede: {{ process.network_work_label }}</p>
     <p v-if="mode === 'actions' && process.open_deadline" class="mt-1 text-sm" :class="process.open_deadline.overdue ? 'text-danger' : 'text-muted'">
@@ -57,7 +57,10 @@ function saved() { action.value = null; uploading.value = null; emit('saved') }
       <BaseButton v-for="item in actions" :key="item.key" variant="secondary" @click="action = item.key">{{ item.label }}</BaseButton>
     </div>
     <template v-if="mode === 'requirements' && process.phase_checklist?.items.length">
-      <p class="mt-5 text-sm font-medium">{{ process.phase_checklist.label }} · {{ process.phase_checklist.satisfied }}/{{ process.phase_checklist.total }} requisitos atendidos</p>
+      <div class="mt-5 rounded-lg bg-canvas px-4 py-3">
+        <p class="text-xs font-medium">{{ process.phase_checklist.label }} · {{ process.phase_checklist.satisfied }}/{{ process.phase_checklist.total }} requisitos atendidos</p>
+        <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-line" aria-hidden="true"><div class="h-full rounded-full bg-primary" :style="{ width: process.phase_checklist.total ? `${process.phase_checklist.satisfied / process.phase_checklist.total * 100}%` : '0%' }" /></div>
+      </div>
       <SelectField v-if="process.phase_checklist.items.some(i => i.document_owner === 'equipment')" v-model="equipment" class="mt-3 max-w-sm" label="Equipamento para os anexos do catálogo" :options="equipmentOptions" />
       <ul class="mt-3 divide-y divide-line">
         <li v-for="item in process.phase_checklist.items" :key="item.code" class="flex flex-wrap items-center gap-3 py-3 text-sm">

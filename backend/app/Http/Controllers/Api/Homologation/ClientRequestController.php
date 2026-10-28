@@ -34,6 +34,8 @@ final class ClientRequestController extends Controller
             'status' => ['sometimes', 'nullable', Rule::enum(ClientRequestStatus::class)],
             'mine' => ['sometimes', 'boolean'],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:100'],
         ]);
 
         $items = ClientRequest::query()->with(self::RELATIONS)
@@ -43,12 +45,20 @@ final class ClientRequestController extends Controller
                 ->where('code', 'ilike', "%{$s}%")
                 ->orWhereHas('client', fn ($c) => $c->where('name', 'ilike', "%{$s}%"))
                 ->orWhereHas('consumerUnit', fn ($u) => $u->where('number', 'like', "%{$s}%"))))
-            ->latest('id')->limit(200)->get();
+            ->latest('id')->paginate($filters['per_page'] ?? 20);
 
         $counts = ClientRequest::query()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
 
         return response()->json([
-            'data' => $items->map(fn ($r) => ClientRequestResource::forStaff($r)->toArray($request))->values(),
+            'data' => $items->getCollection()->map(fn ($r) => ClientRequestResource::forStaff($r)->toArray($request))->values(),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+                'from' => $items->firstItem(),
+                'to' => $items->lastItem(),
+            ],
             'counts' => $counts,
         ]);
     }

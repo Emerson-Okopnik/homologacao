@@ -1,0 +1,239 @@
+{
+  "name": "VERIGRID — Sistema de Homologação",
+  "version": "1.0",
+  "date": "2026-10-27",
+  "nativeFile": "VERIGRID-Homologacao.figcraft",
+  "pages": 5,
+  "productScreens": 22,
+  "dialogs": 14,
+  "nodes": 3400,
+  "interactions": 222,
+  "styles": 11,
+  "variables": 11,
+  "boundsIssues": [],
+  "danglingLinks": [],
+  "screens": [
+    {
+      "key": "foundations",
+      "id": 4,
+      "title": "Identidade e componentes",
+      "preview": "previews/VERIGRID-00-identidade-componentes.png"
+    },
+    {
+      "key": "login",
+      "id": 112,
+      "title": "Acesso à plataforma",
+      "preview": "previews/VERIGRID-01-acesso.png"
+    },
+    {
+      "key": "dashboard",
+      "id": 169,
+      "title": "Dashboard operacional",
+      "preview": "previews/VERIGRID-02-dashboard.png"
+    },
+    {
+      "key": "kanban",
+      "id": 377,
+      "title": "Kanban de homologações",
+      "preview": "previews/VERIGRID-03-kanban.png"
+    },
+    {
+      "key": "process",
+      "id": 711,
+      "title": "Detalhe da homologação",
+      "preview": "previews/VERIGRID-04-detalhe-homologacao.png"
+    },
+    {
+      "key": "documents",
+      "id": 902,
+      "title": "Documentos e revisão",
+      "preview": "previews/VERIGRID-05-documentos-revisao.png"
+    },
+    {
+      "key": "project",
+      "id": 1115,
+      "title": "Novo projeto",
+      "preview": "previews/VERIGRID-06-novo-projeto.png"
+    },
+    {
+      "key": "tracking",
+      "id": 1281,
+      "title": "Distribuidora e vistoria",
+      "preview": "previews/VERIGRID-07-distribuidora-vistoria.png"
+    },
+    {
+      "key": "requests",
+      "id": 1464,
+      "title": "Solicitações de clientes",
+      "preview": "previews/VERIGRID-08-solicitacoes.png"
+    },
+    {
+      "key": "homologations",
+      "id": 1634,
+      "title": "Lista de homologações",
+      "preview": "previews/VERIGRID-09-homologacoes.png"
+    },
+    {
+      "key": "clients",
+      "id": 1857,
+      "title": "Cadastro do cliente",
+      "preview": "previews/VERIGRID-10-cliente.png"
+    },
+    {
+      "key": "settings",
+      "id": 2019,
+      "title": "Configurações do fluxo",
+      "preview": "previews/VERIGRID-11-configuracoes.png"
+    },
+    {
+      "key": "portal",
+      "id": 2198,
+      "title": "Portal do cliente",
+      "preview": "previews/VERIGRID-12-portal-inicio.png"
+    },
+    {
+      "key": "requestStep1",
+      "id": 2268,
+      "title": "Solicitação · Unidade consumidora",
+      "preview": "previews/VERIGRID-13-portal-unidade.png"
+    },
+    {
+      "key": "requestStep2",
+      "id": 2354,
+      "title": "Solicitação · Equipamentos",
+      "preview": "previews/VERIGRID-14-portal-equipamentos.png"
+    },
+    {
+      "key": "requestStep3",
+      "id": 2456,
+      "title": "Solicitação · Uso da energia",
+      "preview": "previews/VERIGRID-15-portal-uso-energia.png"
+    },
+    {
+      "key": "requestStep4",
+      "id": 2542,
+      "title": "Solicitação · Revisão e envio",
+      "preview": "previews/VERIGRID-16-portal-revisao.png"
+    },
+    {
+      "key": "portalDetail",
+      "id": 2624,
+      "title": "Portal · Acompanhamento",
+      "preview": "previews/VERIGRID-17-portal-acompanhamento.png"
+    },
+    {
+      "key": "portalDocs",
+      "id": 2722,
+      "title": "Portal · Documentos",
+      "preview": "previews/VERIGRID-18-portal-documentos.png"
+    },
+    {
+      "key": "mobile",
+      "id": 2796,
+      "title": "Mobile · Início",
+      "preview": "previews/VERIGRID-19-mobile-inicio.png"
+    },
+    {
+      "key": "mobileDetail",
+      "id": 2848,
+      "title": "Mobile · Acompanhamento",
+      "preview": "previews/VERIGRID-20-mobile-acompanhamento.png"
+    },
+    {
+      "key": "mobileDocs",
+      "id": 2913,
+      "title": "Mobile · Documentos",
+      "preview": "previews/VERIGRID-21-mobile-documentos.png"
+    },
+    {
+      "key": "distributor",
+      "id": 3117,
+      "title": "Retorno e correção da distribuidora",
+      "preview": "previews/VERIGRID-22-distribuidora-correcao.png"
+    },
+    {
+      "key": "upload",
+      "id": 2972,
+      "title": "Enviar documento",
+      "preview": "previews/VERIGRID-estado-01-upload.png"
+    },
+    {
+      "key": "portalUpload",
+      "id": 2994,
+      "title": "Enviar nova versão",
+      "preview": "previews/VERIGRID-estado-02-portalUpload.png"
+    },
+    {
+      "key": "approved",
+      "id": 3011,
+      "title": "Documento aprovado",
+      "preview": "previews/VERIGRID-estado-03-approved.png"
+    },
+    {
+      "key": "review",
+      "id": 3022,
+      "title": "Solicitar ajuste",
+      "preview": "previews/VERIGRID-estado-04-review.png"
+    },
+    {
+      "key": "transition",
+      "id": 3035,
+      "title": "Requisitos pendentes",
+      "preview": "previews/VERIGRID-estado-05-transition.png"
+    },
+    {
+      "key": "sent",
+      "id": 3053,
+      "title": "Solicitação enviada",
+      "preview": "previews/VERIGRID-estado-06-sent.png"
+    },
+    {
+      "key": "fileReceived",
+      "id": 3066,
+      "title": "Arquivo recebido",
+      "preview": "previews/VERIGRID-estado-07-fileReceived.png"
+    },
+    {
+      "key": "phaseDialog",
+      "id": 3077,
+      "title": "Configurar situação",
+      "preview": "previews/VERIGRID-estado-08-phaseDialog.png"
+    },
+    {
+      "key": "mobileUpload",
+      "id": 3101,
+      "title": "Mobile · Enviar arquivo",
+      "preview": "previews/VERIGRID-estado-09-mobileUpload.png"
+    },
+    {
+      "key": "projectCreated",
+      "id": 3327,
+      "title": "Projeto criado",
+      "preview": "previews/VERIGRID-estado-10-projectCreated.png"
+    },
+    {
+      "key": "complement",
+      "id": 3339,
+      "title": "Pedir complemento",
+      "preview": "previews/VERIGRID-estado-11-complement.png"
+    },
+    {
+      "key": "inspection",
+      "id": 3353,
+      "title": "Resultado da vistoria",
+      "preview": "previews/VERIGRID-estado-12-inspection.png"
+    },
+    {
+      "key": "reset",
+      "id": 3379,
+      "title": "Recuperar acesso",
+      "preview": "previews/VERIGRID-estado-13-reset.png"
+    },
+    {
+      "key": "mobileReceived",
+      "id": 3393,
+      "title": "Mobile · Arquivo recebido",
+      "preview": "previews/VERIGRID-estado-14-mobileReceived.png"
+    }
+  ]
+}

@@ -42,7 +42,7 @@ final class ClientController extends Controller
             })
             ->when($filters['type'] ?? null, fn ($q, string $type) => $q->where('type', $type))
             ->when($filters['status'] ?? null, fn ($q, string $status) => $q->where('status', $status))
-            ->orderBy('name')
+            ->orderBy('name')->orderBy('id')
             ->paginate($filters['per_page'] ?? 20);
 
         return ClientResource::collection($clients);

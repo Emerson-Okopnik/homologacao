@@ -50,6 +50,7 @@ final class DocumentController extends Controller
         $this->authorize('documents.view');
 
         $filters = $request->validate([
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:100'],
             'review_status' => ['sometimes', 'nullable', Rule::in(['pendente', 'aprovado', 'reprovado'])],
             'type' => ['sometimes', 'nullable', Rule::in(array_keys(DocumentTypes::TYPES))],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -64,7 +65,7 @@ final class DocumentController extends Controller
                 ->where('original_name', 'ilike', "%{$s}%")
                 ->orWhereHas('process', fn ($p) => $p->where('code', 'ilike', "%{$s}%"))))
             ->latest('id')
-            ->paginate(25);
+            ->paginate($filters['per_page'] ?? 25);
 
         return DocumentResource::collection($docs);
     }

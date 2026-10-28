@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDashed, Download, Pencil, Upload, XCircle } from '@lucide/vue'
+import { Activity, AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, CircleDashed, Download, Pencil, Upload, XCircle, Zap } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
@@ -44,6 +44,7 @@ const sections: Array<{ value: ProcessSection; label: string }> = [
 watch(() => route.params.id, () => { section.value = 'summary' })
 const guidance = computed(() => process.value ? processGuidance(process.value) : null)
 const deadline = computed(() => process.value ? processDeadline(process.value) : null)
+const distributor = computed(() => process.value?.distributor ?? process.value?.project?.consumer_unit?.distributor)
 
 const canManage = computed(() => auth.can('homologations.manage'))
 const checklistDone = computed(() => (process.value?.checklist ?? []).filter((c) => c.required && (c.status ?? c.document?.review_status) === 'aprovado').length)
@@ -55,6 +56,16 @@ const visiblePendencies = computed(() => section.value === 'history'
 const manualTransitions = computed(() => (process.value?.allowed_transitions ?? []).filter((t) => !['enviado', 'vistoria_solicitada'].includes(t.stage_type ?? t.value)))
 const preparationIssues = computed(() => ['rascunho', 'em_preparacao', 'pronto_para_envio', 'pendencia_distribuidora', 'reprovado'].includes(process.value?.status ?? '') ? process.value?.readiness_issues ?? [] : [])
 const pendingRequirements = computed(() => preparationIssues.value.length || process.value?.phase_checklist?.blocking.length || 0)
+const workflowPhases = [
+  { value: 'PREPARATION', label: 'Preparação' },
+  { value: 'EXTERNAL_ANALYSIS', label: 'Análise da distribuidora' },
+  { value: 'CORRECTION', label: 'Correção' },
+  { value: 'EXECUTION', label: 'Execução' },
+  { value: 'INSPECTION', label: 'Vistoria' },
+  { value: 'CONNECTION', label: 'Conexão' },
+]
+const activePhase = computed(() => workflowPhases.findIndex(phase => phase.value === process.value?.stage))
+const initials = (name?: string) => name?.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]).join('') || '—'
 
 function reload() {
   transition.value = null
@@ -107,56 +118,64 @@ const interactionLabels: Record<string, string> = {
     <p v-else-if="!process && loading" class="py-12 text-center text-muted" role="status">Carregando processo…</p>
 
     <template v-else-if="process">
-      <header class="mb-6 flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6 lg:flex-row lg:items-start lg:justify-between">
+      <header class="mb-7 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-3">
-            <h1 class="text-2xl font-bold tracking-tight">{{ process.project?.client?.name ?? process.code }}</h1>
+            <h1 class="text-2xl font-semibold tracking-tight text-ink md:text-[1.75rem]">{{ process.project?.client?.name ?? process.code }}</h1>
+            <span class="inline-flex rounded-md bg-blue-soft px-3 py-1.5 text-[11px] font-medium text-corporate-blue">{{ process.stage_label }}</span>
             <StatusBadge :tone="statusTone(process.status)">{{ process.status_label }}</StatusBadge>
           </div>
-          <p class="mt-1 text-sm text-muted">
-            {{ process.code }} · UC {{ process.project?.consumer_unit?.number }} · {{ process.distributor?.name }}
-          </p>
-          <dl class="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-            <div v-if="process.protocol_number">
-              <dt class="text-xs text-muted">Protocolo</dt>
-              <dd class="font-mono font-medium">{{ process.protocol_number }}</dd>
-            </div>
-            <div v-if="deadline">
-              <dt class="text-xs text-muted">{{ deadline.label }}</dt>
-              <dd class="font-medium tabular-nums" :class="deadline.overdue ? 'text-danger' : ''">{{ formatDate(deadline.date) }}<span v-if="deadline.overdue"> · vencido</span></dd>
-            </div>
-          </dl>
+          <p class="mt-3 text-xs leading-6 text-muted">{{ process.code }} · UC {{ process.project?.consumer_unit?.number ?? '—' }} · {{ distributor?.name ?? 'Distribuidora não informada' }}</p>
+          <p v-if="deadline" class="mt-1 text-xs" :class="deadline.overdue ? 'font-medium text-danger' : 'text-muted'">{{ deadline.label }}: {{ formatDate(deadline.date) }}<span v-if="deadline.overdue"> · vencido</span></p>
         </div>
+        <BaseButton v-if="canManage && manualTransitions.length" class="shrink-0" @click="transition = {}">Alterar etapa do processo</BaseButton>
       </header>
 
-      <nav class="mb-6 flex flex-wrap gap-2" aria-label="Seções do processo">
+      <nav class="mb-6 overflow-x-auto rounded-xl border border-line bg-surface px-5 py-6" aria-label="Fases da homologação">
+        <ol class="flex min-w-[620px]">
+          <li v-for="(phase, index) in workflowPhases" :key="phase.value" class="relative flex-1 last:flex-none last:pr-2" :class="index === workflowPhases.length - 1 ? 'min-w-20' : 'pr-3'" :aria-current="index === activePhase ? 'step' : undefined">
+            <span v-if="index < workflowPhases.length - 1" class="absolute top-3.5 right-0 left-8 h-px" :class="index < activePhase ? 'bg-primary' : 'bg-line'" aria-hidden="true" />
+            <span class="relative inline-flex size-7 items-center justify-center rounded-full border text-[10px] font-medium" :class="index <= activePhase ? 'border-primary bg-primary text-on-primary' : 'border-line bg-surface text-muted'">
+              <Check v-if="index < activePhase || process.status === 'conectado'" class="size-3.5" aria-hidden="true" /><template v-else>{{ index + 1 }}</template>
+            </span>
+            <p class="mt-3 max-w-36 text-[10px] leading-4" :class="index === activePhase ? 'font-semibold text-ink' : 'text-muted'">{{ phase.label }}</p>
+          </li>
+        </ol>
+      </nav>
+
+      <nav class="mb-6 flex gap-5 overflow-x-auto border-b border-line" aria-label="Seções do processo">
         <button v-for="item in sections" :key="item.value" type="button"
-          class="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-          :class="section === item.value ? 'bg-primary text-white' : 'border border-line bg-surface text-muted hover:text-ink'"
+          class="min-h-12 shrink-0 border-b-[3px] px-0.5 text-xs font-medium transition-colors"
+          :class="section === item.value ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-ink'"
           :aria-pressed="section === item.value" aria-controls="process-content" @click="section = item.value">
           {{ item.label }}
         </button>
       </nav>
 
       <div id="process-content">
-        <section v-if="section === 'summary' && guidance" class="mb-6 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-next">
-          <p class="text-xs font-semibold uppercase tracking-wider text-muted">{{ isProcessClosed(process) ? 'Situação do processo' : 'Próximo passo' }}</p>
-          <div class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div class="max-w-2xl">
-              <h2 id="sec-next" class="text-lg font-semibold">{{ guidance.title }}</h2>
-              <p class="mt-1 text-sm text-muted">{{ guidance.description }}</p>
-              <p v-if="!isProcessClosed(process)" class="mt-3 text-sm">Responsável pela próxima ação: <strong>{{ guidance.responsibility }}</strong></p>
+        <div v-if="section === 'summary' && guidance" class="mb-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <section class="overflow-hidden rounded-xl bg-[#0A1F5C] p-5 text-white md:p-6" aria-labelledby="sec-next">
+            <div class="flex items-center gap-3"><Activity class="size-5 text-[#8DE0C4]" aria-hidden="true" /><p class="text-[10px] font-medium uppercase tracking-[0.14em] text-[#8DE0C4]">{{ isProcessClosed(process) ? 'Situação do processo' : 'Próximo passo' }}</p></div>
+            <h2 id="sec-next" class="mt-5 text-xl font-medium leading-8 tracking-tight">{{ guidance.title }}</h2>
+            <p class="mt-3 max-w-2xl text-xs leading-6 text-white/80">{{ guidance.description }}</p>
+            <p v-if="!isProcessClosed(process)" class="mt-4 text-xs leading-6 text-white/80">Responsável pela próxima ação: <strong class="font-medium text-white">{{ guidance.responsibility }}</strong></p>
+            <div class="mt-5 flex flex-wrap items-center justify-between gap-4">
+              <span v-if="pendingRequirements && !isProcessClosed(process)" class="rounded-md bg-white/10 px-3 py-2 text-[11px] text-white/85">{{ pendingRequirements }} {{ pendingRequirements === 1 ? 'requisito a conferir' : 'requisitos a conferir' }} nesta fase</span>
+              <BaseButton class="ml-auto" variant="secondary" @click="section = guidance.section"><ArrowRight class="size-4" aria-hidden="true" />{{ guidance.action }}</BaseButton>
             </div>
-            <BaseButton class="shrink-0" @click="section = guidance.section">{{ guidance.action }}</BaseButton>
-          </div>
-          <dl class="mt-5 grid gap-4 border-t border-line pt-4 text-sm sm:grid-cols-3">
-            <div><dt class="text-xs text-muted">Responsável técnico do projeto</dt><dd class="mt-1 font-medium">{{ process.project?.technical_responsible?.name ?? 'Ainda não definido' }}</dd></div>
-            <div><dt class="text-xs text-muted">Responsável pela homologação</dt><dd class="mt-1 font-medium">{{ process.assignee?.name ?? 'Ainda não atribuído' }}</dd></div>
-            <div><dt class="text-xs text-muted">Documentos obrigatórios</dt><dd class="mt-1 font-medium">{{ checklistDone }} de {{ checklistRequired }} aprovados</dd></div>
-          </dl>
-          <p v-if="pendingRequirements && !isProcessClosed(process)" class="mt-4 text-sm text-muted">Há {{ pendingRequirements }} {{ pendingRequirements === 1 ? 'requisito' : 'requisitos' }} a conferir nesta fase. Consulte Documentos e dados técnicos para ver os detalhes.</p>
-          <BaseButton v-if="canManage && manualTransitions.length" class="mt-4" variant="ghost" @click="transition = {}">Alterar etapa do processo</BaseButton>
-        </section>
+          </section>
+          <section class="rounded-xl border border-line bg-surface p-5 md:p-6" aria-labelledby="sec-info">
+            <h2 id="sec-info" class="text-sm font-semibold">Informações do processo</h2>
+            <dl class="mt-5 divide-y divide-line text-xs">
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Código</dt><dd class="break-all text-right font-medium">{{ process.code }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Protocolo</dt><dd class="break-all text-right font-medium">{{ process.protocol_number ?? 'Não registrado' }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Distribuidora</dt><dd class="text-right font-medium">{{ distributor?.name ?? '—' }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Módulos</dt><dd class="text-right font-medium">{{ formatNumber(process.project?.installed_power_kwp, 'kWp') }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Modalidade</dt><dd class="text-right font-medium">{{ process.project?.modality_label ?? '—' }}</dd></div>
+              <div class="flex justify-between gap-4 pt-3"><dt class="text-muted">Aberto em</dt><dd class="text-right font-medium">{{ formatDate(process.created_at) }}</dd></div>
+            </dl>
+          </section>
+        </div>
 
         <details v-if="section === 'technical' && preparationIssues.length" class="mb-6 rounded-xl border border-line bg-surface p-4">
           <summary class="cursor-pointer text-sm font-semibold">O que falta para o envio · {{ preparationIssues.length }} {{ preparationIssues.length === 1 ? 'requisito' : 'requisitos' }}</summary>
@@ -165,9 +184,9 @@ const interactionLabels: Record<string, string> = {
           </ul>
         </details>
 
-        <div v-if="section !== 'distributor'" class="grid gap-6" :class="section === 'technical' ? 'lg:grid-cols-[1fr_22rem]' : ''">
+        <div v-if="section !== 'distributor'" class="grid items-start gap-6" :class="section === 'technical' || section === 'summary' ? 'lg:grid-cols-[minmax(0,1fr)_22rem]' : ''">
           <div class="flex min-w-0 flex-col gap-6">
-            <section v-if="section === 'technical'" class="rounded-2xl border border-line bg-surface" aria-labelledby="sec-docs">
+            <section v-if="section === 'technical'" class="rounded-xl border border-line bg-surface" aria-labelledby="sec-docs">
               <header class="flex items-center justify-between border-b border-line px-6 py-4">
                 <h2 id="sec-docs" class="font-semibold">Checklist de documentos</h2>
                 <span class="text-sm text-muted tabular-nums">{{ checklistDone }}/{{ checklistRequired }} obrigatórios aprovados</span>
@@ -238,7 +257,7 @@ const interactionLabels: Record<string, string> = {
               </ul>
             </section>
 
-            <section v-if="section === 'summary' || (section === 'history' && visiblePendencies.length)" class="rounded-2xl border border-line bg-surface" aria-labelledby="sec-pend">
+            <section v-if="section === 'summary' || (section === 'history' && visiblePendencies.length)" class="rounded-xl border border-line bg-surface" aria-labelledby="sec-pend">
               <header class="flex items-center justify-between border-b border-line px-6 py-4">
                 <h2 id="sec-pend" class="font-semibold">
                   {{ section === 'history' ? 'Pendências resolvidas' : 'Pendências em aberto' }}
@@ -267,7 +286,7 @@ const interactionLabels: Record<string, string> = {
               </ul>
             </section>
 
-            <section v-if="section === 'history'" class="rounded-2xl border border-line bg-surface" aria-labelledby="sec-int">
+            <section v-if="section === 'history'" class="rounded-xl border border-line bg-surface" aria-labelledby="sec-int">
               <header class="flex items-center justify-between border-b border-line px-6 py-4">
                 <h2 id="sec-int" class="font-semibold">Interações</h2>
                 <BaseButton v-if="canManage" variant="secondary" @click="interactionOpen = true">Registrar</BaseButton>
@@ -285,8 +304,25 @@ const interactionLabels: Record<string, string> = {
             </section>
           </div>
 
-          <aside v-if="section === 'technical' || section === 'history'" class="flex flex-col gap-6">
-            <section v-if="section === 'technical'" class="rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-proj">
+          <aside v-if="section === 'technical' || section === 'history' || section === 'summary'" class="flex flex-col gap-6">
+            <section v-if="section === 'summary'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-team">
+              <h2 id="sec-team" class="text-sm font-semibold">Responsáveis</h2>
+              <div class="mt-5 flex items-start gap-3">
+                <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary">{{ initials(process.project?.technical_responsible?.name) }}</span>
+                <div><p class="text-xs font-medium">{{ process.project?.technical_responsible?.name ?? 'Ainda não definido' }}</p><p class="mt-1 text-[11px] leading-5 text-muted">Responsável técnico do projeto</p></div>
+              </div>
+              <div class="mt-5 flex items-start gap-3 border-t border-line pt-5">
+                <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-soft text-xs font-semibold text-corporate-blue">{{ initials(process.assignee?.name) }}</span>
+                <div><p class="text-xs font-medium">{{ process.assignee?.name ?? 'Ainda não atribuído' }}</p><p class="mt-1 text-[11px] leading-5 text-muted">Responsável pela homologação</p></div>
+              </div>
+            </section>
+            <section v-if="section === 'summary'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-doc-progress">
+              <div class="flex items-center gap-3"><Zap class="size-5 text-primary" aria-hidden="true" /><h2 id="sec-doc-progress" class="text-sm font-semibold">Documentos obrigatórios</h2></div>
+              <p class="mt-4 text-xs text-muted">{{ checklistDone }} de {{ checklistRequired }} aprovados</p>
+              <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-canvas" aria-hidden="true"><div class="h-full rounded-full bg-primary" :style="{ width: checklistRequired ? `${checklistDone / checklistRequired * 100}%` : '0%' }" /></div>
+              <BaseButton class="mt-5 w-full" variant="secondary" @click="section = 'technical'">Ver documentos e requisitos</BaseButton>
+            </section>
+            <section v-if="section === 'technical'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-proj">
               <RouterLink v-if="process.project" :to="`/projetos/${process.project.id}/dados-tecnicos`" class="mb-3 inline-block text-sm font-medium text-primary">Dados técnicos, ART/TRT e versões</RouterLink>
               <div class="flex items-center justify-between">
                 <h2 id="sec-proj" class="font-semibold">Projeto</h2>
@@ -338,7 +374,7 @@ const interactionLabels: Record<string, string> = {
               </ul>
             </section>
 
-            <section v-if="section === 'history'" class="rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-hist">
+            <section v-if="section === 'history'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-hist">
               <h2 id="sec-hist" class="font-semibold">Histórico de etapas</h2>
               <ol class="mt-4 flex flex-col gap-4 border-l border-line pl-4">
                 <li v-for="(h, index) in process.history ?? []" :key="index" class="relative">
@@ -349,7 +385,7 @@ const interactionLabels: Record<string, string> = {
                 </li>
               </ol>
             </section>
-            <section v-if="section === 'history' && process.timeline?.length" class="rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-events">
+            <section v-if="section === 'history' && process.timeline?.length" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-events">
               <h2 id="sec-events" class="font-semibold">Registros da execução e conexão</h2>
               <ul class="mt-4 space-y-4">
                 <li v-for="(event, index) in process.timeline" :key="index" class="text-sm">
@@ -362,7 +398,7 @@ const interactionLabels: Record<string, string> = {
           </aside>
         </div>
 
-        <details v-if="section === 'technical'" class="mt-6 rounded-2xl border border-line bg-surface p-5">
+        <details v-if="section === 'technical'" class="mt-6 rounded-xl border border-line bg-surface p-5">
           <summary class="cursor-pointer font-semibold">Regras aplicáveis à fase<span v-if="process.phase_checklist"> · {{ process.phase_checklist.satisfied }}/{{ process.phase_checklist.total }} atendidas</span></summary>
           <ProcessPhasePanel :process="process" mode="requirements" @saved="reload" />
         </details>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { Building2, Pencil, Plus, ShieldCheck, Trash2, UserPlus } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
@@ -33,6 +33,9 @@ const matrixMessage = ref<string | null>(null)
 const users = ref<Paginated<User> | null>(null)
 const userSearch = ref('')
 const userPage = ref(1)
+const userPerPage = ref(20)
+const loadingUsers = ref(false)
+let userRequestId = 0
 
 const tab = ref<'roles' | 'users'>('roles')
 const error = ref<ApiError | null>(null)
@@ -83,10 +86,21 @@ async function loadRoles(keepSlug?: string) {
 }
 
 async function loadUsers() {
-  if (!selectedId.value) return
-  users.value = await api<Paginated<User>>(`/admin/tenants/${selectedId.value}/users`, {
-    query: { search: userSearch.value || undefined, page: userPage.value },
-  })
+  const tenantId = selectedId.value
+  if (!tenantId) return
+  const requestId = ++userRequestId
+  loadingUsers.value = true
+  error.value = null
+  try {
+    const result = await api<Paginated<User>>(`/admin/tenants/${tenantId}/users`, {
+      query: { search: userSearch.value || undefined, page: userPage.value, per_page: userPerPage.value },
+    })
+    if (requestId === userRequestId && tenantId === selectedId.value) users.value = result
+  } catch (e) {
+    if (requestId === userRequestId && tenantId === selectedId.value) error.value = toApiError(e)
+  } finally {
+    if (requestId === userRequestId) loadingUsers.value = false
+  }
 }
 
 function resetDraft() {
@@ -175,16 +189,26 @@ async function onUserSaved() {
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
+let userSearchTimer: ReturnType<typeof setTimeout> | undefined
 watch(tenantSearch, () => {
   clearTimeout(searchTimer)
   searchTimer = setTimeout(loadTenants, 300)
 })
 watch(userSearch, () => {
-  clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
+  clearTimeout(userSearchTimer)
+  userSearchTimer = setTimeout(() => {
     userPage.value = 1
     loadUsers()
   }, 300)
+})
+watch(userPerPage, () => {
+  userPage.value = 1
+  void loadUsers()
+})
+onScopeDispose(() => {
+  clearTimeout(searchTimer)
+  clearTimeout(userSearchTimer)
+  userRequestId++
 })
 watch(selectedId, async () => {
   roles.value = []
@@ -227,7 +251,7 @@ onMounted(async () => {
     </InlineAlert>
 
     <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
-      <aside class="flex w-full flex-col rounded-2xl border border-line bg-surface lg:sticky lg:top-6 lg:w-80 lg:shrink-0">
+      <aside class="flex w-full flex-col vg-panel lg:sticky lg:top-6 lg:w-80 lg:shrink-0">
         <div class="border-b border-line p-4">
           <SearchInput v-model="tenantSearch" label="Buscar tenant" />
         </div>
@@ -244,7 +268,7 @@ onMounted(async () => {
             >
               <span
                 class="flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold"
-                :class="t.id === selectedId ? 'bg-primary text-white' : 'bg-canvas text-muted'"
+                :class="t.id === selectedId ? 'bg-primary text-on-primary' : 'bg-canvas text-muted'"
               >
                 {{ t.name.slice(0, 2).toUpperCase() }}
               </span>
@@ -262,7 +286,7 @@ onMounted(async () => {
       </aside>
 
       <section v-if="selected" class="min-w-0 flex-1" :aria-label="`Tenant ${selected.name}`">
-        <div class="mb-4 flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 sm:flex-row sm:items-center">
+        <div class="mb-4 flex flex-col gap-4 vg-panel p-5 sm:flex-row sm:items-center">
           <div class="flex min-w-0 flex-1 items-center gap-3">
             <span class="flex size-11 items-center justify-center rounded-xl bg-primary-soft text-primary">
               <Building2 class="size-5" aria-hidden="true" />
@@ -304,7 +328,7 @@ onMounted(async () => {
         </div>
 
         <div v-if="tab === 'roles'" class="flex flex-col gap-4 xl:flex-row xl:items-start">
-          <div class="flex w-full flex-col rounded-2xl border border-line bg-surface xl:w-64 xl:shrink-0">
+          <div class="flex w-full flex-col vg-panel xl:w-64 xl:shrink-0">
             <div class="flex items-center justify-between border-b border-line px-4 py-3">
               <h3 class="text-sm font-semibold">Perfis</h3>
               <button
@@ -336,7 +360,7 @@ onMounted(async () => {
             </ul>
           </div>
 
-          <div v-if="selectedRole" class="min-w-0 flex-1 rounded-2xl border border-line bg-surface">
+          <div v-if="selectedRole" class="min-w-0 flex-1 vg-panel">
             <div class="flex flex-col gap-3 border-b border-line px-5 py-4 sm:flex-row sm:items-center">
               <div class="min-w-0 flex-1">
                 <h3 class="font-semibold">{{ selectedRole.name }}</h3>
@@ -392,7 +416,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-else class="rounded-2xl border border-line bg-surface">
+        <div v-else class="vg-panel">
           <div class="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between">
             <SearchInput v-model="userSearch" label="Buscar usuário" placeholder="Nome ou e-mail" />
             <BaseButton @click="userDialog = { user: null }">
@@ -401,7 +425,7 @@ onMounted(async () => {
             </BaseButton>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="vg-table w-full text-xs">
               <thead class="text-left text-xs uppercase tracking-wide text-muted">
                 <tr class="border-b border-line">
                   <th scope="col" class="px-4 py-3 font-semibold">Usuário</th>
@@ -415,7 +439,7 @@ onMounted(async () => {
                   <td class="px-4 py-3">
                     <span class="flex items-center gap-1.5 font-medium">
                       {{ u.name }}
-                      <span v-if="u.is_super_admin" class="rounded bg-ink px-1.5 text-[10px] font-semibold text-white">SUPER</span>
+                      <span v-if="u.is_super_admin" class="rounded bg-navy px-1.5 text-[10px] font-semibold text-white">SUPER</span>
                     </span>
                     <span class="block text-xs text-muted">{{ u.email }}</span>
                   </td>
@@ -440,7 +464,9 @@ onMounted(async () => {
           </div>
           <PaginationBar
             v-if="users"
+            v-model:per-page="userPerPage"
             :meta="users.meta"
+            :disabled="loadingUsers || !!error"
             @change="(page) => { userPage = page; loadUsers() }"
           />
         </div>

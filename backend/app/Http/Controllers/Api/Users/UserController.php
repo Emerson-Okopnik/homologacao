@@ -35,7 +35,7 @@ final class UserController extends Controller
             })
             ->when(isset($validated['active']), fn ($q) => $q->where('active', (bool) $validated['active']))
             ->when($validated['role'] ?? null, fn ($q, string $role) => $q->whereHas('roles', fn ($r) => $r->where('slug', $role)))
-            ->orderBy('name')
+            ->orderBy('name')->orderBy('id')
             ->paginate($validated['per_page'] ?? 20)
             ->withQueryString();
 

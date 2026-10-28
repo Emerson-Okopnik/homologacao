@@ -17,10 +17,28 @@ const eventLabels: Record<string, string> = {
   'auth.password_reset': 'Senha redefinida',
   'user.created': 'Usuário criado',
   'user.updated': 'Usuário alterado',
+  'user.roles_changed': 'Perfis do usuário alterados',
+  'user.super_admin_changed': 'Acesso de superadministrador alterado',
+  'role.permissions_changed': 'Permissões do perfil alteradas',
+}
+
+const auditEntities: Record<string, [string, boolean?]> = {
+  user: ['Usuário'], client: ['Cliente'], tenant: ['Empresa', true], role: ['Perfil de acesso'],
+  consumer_unit: ['Unidade consumidora', true], technical_responsible: ['Responsável técnico'],
+  solar_project: ['Projeto'], homologation_process: ['Processo'], client_request: ['Solicitação de cliente', true],
+  process_document: ['Documento'], document: ['Documento'], equipment_catalog: ['Equipamento'],
+  distributor: ['Distribuidora', true], inspection: ['Vistoria', true], project_execution: ['Execução', true],
+  process_pendency: ['Pendência', true], connection_event: ['Evento de conexão'],
 }
 
 export function formatEvent(event: string): string {
-  return eventLabels[event] ?? event
+  if (!event) return 'Evento'
+  if (eventLabels[event]) return eventLabels[event]
+  const [entity, action] = event.split('.')
+  const subject = auditEntities[entity ?? '']
+  const actions: Record<string, [string, string]> = { created: ['criado', 'criada'], updated: ['alterado', 'alterada'], deleted: ['excluído', 'excluída'] }
+  const suffix = actions[action ?? '']
+  return subject && suffix ? `${subject[0]} ${suffix[subject[1] ? 1 : 0]}` : event
 }
 
 const dateOnly = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeZone: 'UTC' })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, BatteryCharging, Cpu, Minus, PackagePlus, Plus, Sun, Trash2, UserPlus, Zap } from '@lucide/vue'
+import { ArrowLeft, BatteryCharging, Cpu, Info, Minus, PackagePlus, Plus, ShieldCheck, Sun, Trash2, UserPlus, Zap } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import FormField from '@/components/ui/FormField.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
@@ -200,6 +200,9 @@ function totalKw(type: Equipment['type']) {
 const moduleTotalKwp = computed(() => totalKw('module'))
 const inverterTotalKw = computed(() => totalKw('inverter'))
 const hasBatteryItem = computed(() => items.value.some((i) => equipmentById.value.get(i.id)?.type === 'battery'))
+const selectedClient = computed(() => allClients.value.find((client) => client.id === form.client_id))
+const selectedUnit = computed(() => units.value.find((unit) => unit.id === form.consumer_unit_id))
+const dcAcRatio = computed(() => inverterTotalKw.value ? moduleTotalKwp.value / inverterTotalKw.value : null)
 
 const accessPower = computed(() => {
   if (!moduleTotalKwp.value || !inverterTotalKw.value) return null
@@ -301,14 +304,14 @@ async function submit() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div class="mx-auto w-full max-w-[1240px]">
     <RouterLink to="/projetos" class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
       <ArrowLeft class="size-4" aria-hidden="true" />
       Projetos
     </RouterLink>
     <PageHeader
-      :title="projectId ? `Editar projeto ${lookups?.project?.code ?? ''}` : 'Novo projeto'"
-      description="Selecione ou cadastre tudo aqui mesmo. Ao salvar, o processo de homologação é aberto com o checklist de documentos."
+      :title="projectId ? `Editar projeto ${lookups?.project?.code ?? ''}` : 'Novo projeto fotovoltaico'"
+      description="Reúna os dados técnicos e abra a homologação em um único fluxo."
     />
 
     <RouterLink v-if="projectId" :to="`/projetos/${projectId}/dados-tecnicos`" class="mb-4 inline-block text-sm font-medium text-primary">Dados técnicos, ART/TRT e versões</RouterLink>
@@ -336,9 +339,11 @@ async function submit() {
 
       <p v-if="notice" class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-ink" role="status">{{ notice }}</p>
 
-      <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-holder">
+      <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div class="min-w-0 space-y-6">
+      <section class="vg-form-section flex flex-col gap-5 rounded-xl border border-line bg-surface p-5 sm:p-6" aria-labelledby="sec-holder">
         <div class="flex items-center gap-3">
-          <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">1</span>
+          <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-on-primary" aria-hidden="true">1</span>
           <h2 id="sec-holder" class="font-semibold">Titular e unidade consumidora</h2>
         </div>
 
@@ -424,10 +429,10 @@ async function submit() {
         </button>
       </section>
 
-      <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-eq">
+      <section class="vg-form-section flex flex-col gap-5 rounded-xl border border-line bg-surface p-5 sm:p-6" aria-labelledby="sec-eq">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3">
-            <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">2</span>
+            <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-on-primary" aria-hidden="true">2</span>
             <h2 id="sec-eq" class="font-semibold">Equipamentos</h2>
           </div>
           <BaseButton variant="secondary" :disabled="items.length >= 30" @click="addRow">
@@ -514,10 +519,10 @@ async function submit() {
         </dl>
       </section>
 
-      <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6" aria-labelledby="sec-tech">
+      <section class="vg-form-section flex flex-col gap-5 rounded-xl border border-line bg-surface p-5 sm:p-6" aria-labelledby="sec-tech">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-3">
-            <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-white" aria-hidden="true">3</span>
+            <span class="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-on-primary" aria-hidden="true">3</span>
             <h2 id="sec-tech" class="font-semibold">Dados técnicos</h2>
           </div>
           <p v-if="generationType" class="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary" aria-live="polite">
@@ -573,12 +578,43 @@ async function submit() {
         </div>
         <TextareaField v-model="form.notes" label="Observações técnicas" :rows="3" :error="error?.firstError('notes')" />
       </section>
+      </div>
 
-      <div class="sticky bottom-0 -mx-2 flex justify-end gap-2 border-t border-line bg-canvas/95 px-2 py-4 backdrop-blur">
+      <aside class="min-w-0 space-y-5 xl:sticky xl:top-24" aria-label="Resumo do projeto">
+        <section class="overflow-hidden rounded-xl bg-[#0A1F5C] p-6 text-white" aria-labelledby="system-summary">
+          <p id="system-summary" class="text-[10px] font-medium tracking-[0.14em] text-[#A1DEC9]">SEU PROJETO EM NÚMEROS</p>
+          <div class="mt-7 flex flex-wrap items-baseline gap-2" aria-live="polite">
+            <span class="text-4xl font-medium tracking-tight tabular-nums">{{ formatNumber(moduleTotalKwp) }}</span>
+            <span class="text-sm text-[#C8D5EE]">kWp</span>
+          </div>
+          <p class="mt-3 text-xs leading-relaxed text-[#C8D5EE]">Potência dos módulos · corrente contínua</p>
+          <dl class="mt-7 space-y-5 border-t border-white/15 pt-6 text-xs">
+            <div class="flex items-start justify-between gap-4"><dt class="text-[#C8D5EE]">Potência dos inversores</dt><dd class="text-right font-medium tabular-nums">{{ formatNumber(inverterTotalKw, 'kW') }}</dd></div>
+            <div class="flex items-start justify-between gap-4"><dt class="text-[#C8D5EE]">Relação CC / CA</dt><dd class="text-right font-medium tabular-nums">{{ formatNumber(dcAcRatio) }}</dd></div>
+            <div class="flex items-start justify-between gap-4"><dt class="text-[#C8D5EE]">Potência de acesso</dt><dd class="text-right font-medium tabular-nums">{{ formatNumber(accessPower, 'kW') }}</dd></div>
+            <div class="flex items-start justify-between gap-4"><dt class="text-[#C8D5EE]">Distribuidora</dt><dd class="max-w-[60%] text-right font-medium">{{ selectedUnit?.distributor?.name ?? 'Selecione a UC' }}</dd></div>
+          </dl>
+          <p class="mt-7 flex items-start gap-2 rounded-lg bg-white/8 p-3 text-[11px] leading-relaxed text-[#D3DFF6]">
+            <Info class="mt-0.5 size-3.5 shrink-0 text-[#8DE0C4]" aria-hidden="true" />
+            {{ projectId ? 'Os requisitos serão reavaliados ao salvar as alterações.' : 'O processo será aberto na fase Preparação.' }}
+          </p>
+        </section>
+        <section class="rounded-xl border border-line bg-surface p-5">
+          <h2 class="flex items-center gap-2 text-sm font-semibold"><ShieldCheck class="size-4 text-primary" aria-hidden="true" />Tudo começa com os dados certos</h2>
+          <p class="mt-3 text-xs leading-6 text-muted">As potências são calculadas pelos equipamentos. O checklist será definido conforme a distribuidora e as características do projeto.</p>
+          <p v-if="selectedClient" class="mt-4 border-t border-line pt-4 text-xs text-muted">Titular <span class="mt-1 block font-medium text-ink">{{ selectedClient.name }}</span></p>
+        </section>
+      </aside>
+      </div>
+
+      <div class="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-surface/95 px-5 py-4 backdrop-blur">
+        <div class="hidden items-center gap-3 sm:flex"><ShieldCheck class="size-5 text-primary" aria-hidden="true" /><div><p class="text-xs font-semibold">{{ projectId ? 'Revise e salve as alterações' : 'Pronto para começar' }}</p><p class="mt-1 text-[11px] text-muted">Os documentos ficam organizados no processo.</p></div></div>
+        <div class="flex w-full flex-wrap justify-end gap-2 sm:w-auto">
         <RouterLink to="/projetos" class="inline-flex h-10 items-center rounded-lg border border-line px-4 text-sm font-medium hover:bg-surface">
           Cancelar
         </RouterLink>
         <BaseButton type="submit" :loading="submitting">{{ projectId ? 'Salvar alterações' : 'Criar projeto e abrir processo' }}</BaseButton>
+        </div>
       </div>
     </form>
 

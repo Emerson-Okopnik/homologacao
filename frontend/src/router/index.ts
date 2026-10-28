@@ -228,5 +228,5 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} · Homologa Solar` : 'Homologa Solar'
+  document.title = to.meta.title ? `${to.meta.title} · VERIGRID` : 'VERIGRID · Homologação fotovoltaica'
 })

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ExternalLink } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import WorkflowConfigurationDialog from './WorkflowConfigurationDialog.vue'
@@ -30,10 +31,10 @@ function saved() {
 }
 </script>
 <template>
-  <div class="space-y-6">
+  <div class="workflow-grid">
     <InlineAlert v-if="error">{{ error.message }}</InlineAlert>
     <template v-if="data">
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      <section class="workflow-phases vg-panel p-5 sm:p-6">
         <h2 class="font-semibold">Configuração das etapas</h2>
         <p class="mt-2 text-sm text-muted">As seis fases seguem o Dashboard e o Kanban. Abra uma fase para configurar suas situações e transições.</p>
         <div class="mt-5 divide-y divide-line">
@@ -73,15 +74,15 @@ function saved() {
           </ul>
         </details>
       </section>
-      <section class="rounded-2xl border border-line bg-surface p-5">
-        <header class="mb-4 flex justify-between">
+      <section class="workflow-requirements vg-panel p-5 sm:p-6">
+        <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 class="font-semibold">Requisitos do dossiê</h2>
           <BaseButton v-if="auth.can('requirements.configure')" variant="secondary" @click="dialog = { kind: 'requirement' }"
             >Novo requisito</BaseButton
           >
         </header>
         <ul class="divide-y divide-line">
-          <li v-for="r in data.requirements" :key="r.id" class="flex items-center justify-between gap-3 py-3 text-sm">
+          <li v-for="r in data.requirements" :key="r.id" class="flex flex-wrap items-center justify-between gap-3 py-4 text-sm">
             <div>
               <p>{{ r.name }} · {{ r.active ? 'Ativo' : 'Inativo' }}</p>
               <p class="text-xs text-muted">
@@ -95,16 +96,20 @@ function saved() {
           </li>
         </ul>
       </section>
-      <section class="rounded-2xl border border-line bg-surface p-5">
-        <header class="mb-4 flex justify-between">
+      <section class="workflow-mode rounded-xl bg-navy p-6 text-white" aria-labelledby="assisted-mode">
+        <ExternalLink class="mb-5 size-6 text-[#8DE0C4]" aria-hidden="true" />
+        <h2 id="assisted-mode" class="text-xl font-medium">Envio assistido</h2>
+        <p class="mt-4 text-xs leading-6 text-[#D3DFF6]">Os dossiês são enviados pelo portal da distribuidora, com protocolo e comprovante registrados no sistema.</p>
+        <p class="mt-3 text-[11px] leading-5 text-[#A1DEC9]">O uso de API depende da documentação e do acesso oficial da distribuidora.</p>
+      </section>
+      <section class="workflow-credentials vg-panel p-5 sm:p-6">
+        <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 class="font-semibold">Referências de credenciais</h2>
           <BaseButton v-if="auth.can('integrations.configure')" variant="secondary" @click="dialog = { kind: 'credential' }"
             >Cadastrar referência</BaseButton
           >
         </header>
-        <p class="mb-3 text-sm text-muted">
-          Os envios operam pelo portal no modo assistido. O uso de API depende da documentação e do acesso oficial da distribuidora.
-        </p>
+        <p class="mb-3 text-xs leading-6 text-muted">Referências de acesso aos portais das distribuidoras.</p>
         <ul class="text-sm">
           <li v-for="c in data.credentials" :key="c.id" class="py-2">
             {{ distributors.find((d) => d.id === c.distributor_id)?.name }} · {{ c.credential_ref }} · {{ c.active ? 'Ativa' : 'Inativa' }}
@@ -125,3 +130,14 @@ function saved() {
     </template>
   </div>
 </template>
+
+<style scoped>
+.workflow-grid { display: grid; gap: 1.5rem; }
+@media (min-width: 1280px) {
+  .workflow-grid { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+  .workflow-phases { grid-column: 1; grid-row: 1 / span 2; }
+  .workflow-mode { grid-column: 2; grid-row: 1; }
+  .workflow-credentials { grid-column: 2; grid-row: 2; }
+  .workflow-requirements { grid-column: 1 / -1; grid-row: 3; }
+}
+</style>

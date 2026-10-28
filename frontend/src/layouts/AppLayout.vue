@@ -16,11 +16,11 @@ watch(
 </script>
 
 <template>
-  <div class="flex min-h-dvh">
+  <div class="flex min-h-dvh bg-canvas">
     <AppSidebar :open="mobileOpen" @close="mobileOpen = false" />
     <div class="flex min-w-0 flex-1 flex-col">
       <AppTopbar @toggle-menu="mobileOpen = !mobileOpen" />
-      <main id="conteudo" class="flex-1 px-4 py-6 md:px-8 md:py-8">
+      <main id="conteudo" class="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
         <RouterView />
       </main>
     </div>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { Plus } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import PaginationBar from '@/components/ui/PaginationBar.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import DistributorDialog from './DistributorDialog.vue'
 import EquipmentDialog from './EquipmentDialog.vue'
@@ -26,13 +27,22 @@ const tabs = computed(() =>
 )
 const active = ref<Tab>(tabs.value[0]?.id ?? 'distributors')
 const version = ref(0)
+const page = ref(1)
+const perPage = ref(20)
+watch([active, perPage], () => (page.value = 1))
 
-const source = computed(() => ({ tab: active.value, version: version.value }))
+const source = computed(() => ({ tab: active.value, version: version.value, page: page.value, per_page: perPage.value }))
 const { data, error, loading } = useApiQuery(source, async (s) => {
-  if (s.tab === 'responsibles') return { kind: s.tab, items: (await api<{ data: TechnicalResponsible[] }>('/technical-responsibles')).data }
-  if (s.tab === 'equipment')
-    return { kind: s.tab, items: (await api<Paginated<Equipment>>('/equipment', { query: { per_page: 100 } })).data }
-  return { kind: s.tab, items: (await api<{ data: Distributor[] }>('/distributors')).data }
+  const query = { page: s.page, per_page: s.per_page }
+  if (s.tab === 'responsibles') {
+    const result = await api<Paginated<TechnicalResponsible>>('/technical-responsibles', { query })
+    return { kind: s.tab, items: result.data, meta: result.meta }
+  }
+  if (s.tab === 'equipment') {
+    const result = await api<Paginated<Equipment>>('/equipment', { query })
+    return { kind: s.tab, items: result.data, meta: result.meta }
+  }
+  return { kind: s.tab, items: (await api<{ data: Distributor[] }>('/distributors')).data, meta: undefined }
 })
 
 const responsibles = computed(() => (data.value?.kind === 'responsibles' ? (data.value.items as TechnicalResponsible[]) : []))
@@ -54,7 +64,7 @@ function saved() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <div class="mx-auto w-full max-w-[1240px]">
     <PageHeader title="Cadastros técnicos" description="Responsáveis técnicos, catálogo de equipamentos e distribuidoras atendidas.">
       <template #actions>
         <BaseButton v-if="active === 'responsibles' && auth.can('technical_responsibles.manage')" @click="responsibleDialog = { item: null }">
@@ -77,7 +87,7 @@ function saved() {
         type="button"
         :aria-selected="active === tab.id"
         class="flex-1 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors"
-        :class="active === tab.id ? 'bg-primary text-white' : 'text-muted hover:text-ink'"
+        :class="active === tab.id ? 'bg-primary-soft text-primary' : 'text-muted hover:text-ink'"
         @click="active = tab.id"
       >
         {{ tab.label }}
@@ -86,8 +96,8 @@ function saved() {
 
     <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
 
-    <div v-else class="overflow-x-auto rounded-2xl border border-line bg-surface" role="tabpanel">
-      <table v-if="active === 'responsibles'" class="w-full text-left text-sm" :aria-busy="loading">
+    <div v-else class="overflow-x-auto vg-panel" role="tabpanel">
+      <table v-if="active === 'responsibles'" class="vg-table w-full text-left text-xs" :aria-busy="loading">
         <thead class="bg-canvas text-xs font-semibold uppercase tracking-wider text-muted">
           <tr>
             <th scope="col" class="px-4 py-3">Nome</th>
@@ -124,7 +134,7 @@ function saved() {
         </tbody>
       </table>
 
-      <table v-else-if="active === 'equipment'" class="w-full text-left text-sm" :aria-busy="loading">
+      <table v-else-if="active === 'equipment'" class="vg-table w-full text-left text-xs" :aria-busy="loading">
         <thead class="bg-canvas text-xs font-semibold uppercase tracking-wider text-muted">
           <tr>
             <th scope="col" class="px-4 py-3">Tipo</th>
@@ -161,7 +171,7 @@ function saved() {
         </tbody>
       </table>
 
-      <table v-else class="w-full text-left text-sm" :aria-busy="loading">
+      <table v-else class="vg-table w-full text-left text-xs" :aria-busy="loading">
         <thead class="bg-canvas text-xs font-semibold uppercase tracking-wider text-muted">
           <tr>
             <th scope="col" class="px-4 py-3">Distribuidora</th>
@@ -199,6 +209,7 @@ function saved() {
           </tr>
         </tbody>
       </table>
+      <PaginationBar v-if="data?.meta" v-model:per-page="perPage" :meta="data.meta" :disabled="loading || !!error" @change="page = $event" />
     </div>
 
     <ResponsibleDialog v-if="responsibleDialog" :item="responsibleDialog.item" @close="responsibleDialog = null" @saved="saved" />

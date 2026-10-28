@@ -25,7 +25,7 @@ const integrated = computed(() => (data.value?.distributors ?? []).filter((d) =>
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl">
+  <div class="mx-auto w-full max-w-[1240px]">
     <PageHeader title="Configurações" description="Visão geral do fluxo de homologação, documentos exigidos e integrações com distribuidoras." />
 
     <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
@@ -35,7 +35,7 @@ const integrated = computed(() => (data.value?.distributors ?? []).filter((d) =>
       <WorkflowConfigurationPanel :distributors="data.distributors" :document-types="data.documentTypes" @saved="revision++" />
 
       <div class="grid gap-6 md:grid-cols-2">
-        <section class="rounded-2xl border border-line bg-surface p-6" aria-labelledby="cfg-docs">
+        <section class="vg-panel p-6" aria-labelledby="cfg-docs">
           <div class="mb-4 flex items-center gap-2">
             <FileCheck2 class="size-5 text-primary" aria-hidden="true" />
             <h2 id="cfg-docs" class="font-semibold">Tipos de documento</h2>
@@ -48,7 +48,7 @@ const integrated = computed(() => (data.value?.distributors ?? []).filter((d) =>
           </ul>
         </section>
 
-        <section class="flex flex-col rounded-2xl border border-line bg-surface p-6" aria-labelledby="cfg-int">
+        <section class="flex flex-col vg-panel p-6" aria-labelledby="cfg-int">
           <div class="mb-4 flex items-center gap-2">
             <PlugZap class="size-5 text-primary" aria-hidden="true" />
             <h2 id="cfg-int" class="font-semibold">Integrações com distribuidoras</h2>

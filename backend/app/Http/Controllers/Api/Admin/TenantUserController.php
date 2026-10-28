@@ -31,6 +31,7 @@ final class TenantUserController extends Controller
     public function index(Request $request, Tenant $tenant): AnonymousResourceCollection
     {
         $validated = $request->validate([
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:100'],
             'search' => ['sometimes', 'nullable', 'string', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ]);
@@ -41,8 +42,8 @@ final class TenantUserController extends Controller
                 $term = '%'.addcslashes(mb_strtolower($search), '%_\\').'%';
                 $q->where(fn ($w) => $w->whereRaw('lower(name) like ?', [$term])->orWhereRaw('lower(email) like ?', [$term]));
             })
-            ->orderBy('name')
-            ->paginate(20)
+            ->orderBy('name')->orderBy('id')
+            ->paginate($validated['per_page'] ?? 20)
             ->withQueryString());
 
         return UserResource::collection($users);
