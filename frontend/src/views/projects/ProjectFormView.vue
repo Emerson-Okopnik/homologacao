@@ -601,7 +601,7 @@ async function submit() {
         </section>
         <section class="rounded-xl border border-line bg-surface p-5">
           <h2 class="flex items-center gap-2 text-sm font-semibold"><ShieldCheck class="size-4 text-primary" aria-hidden="true" />Tudo começa com os dados certos</h2>
-          <p class="mt-3 text-xs leading-6 text-muted">As potências são calculadas pelos equipamentos. O checklist será definido conforme a distribuidora e as características do projeto.</p>
+          <p class="mt-3 text-xs leading-6 text-muted">As potências são calculadas pelos equipamentos. A lista de requisitos será definida conforme a distribuidora e as características do projeto.</p>
           <p v-if="selectedClient" class="mt-4 border-t border-line pt-4 text-xs text-muted">Titular <span class="mt-1 block font-medium text-ink">{{ selectedClient.name }}</span></p>
         </section>
       </aside>

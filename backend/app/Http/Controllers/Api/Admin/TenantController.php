@@ -105,7 +105,7 @@ final class TenantController extends Controller
         ]);
 
         if (($data['active'] ?? true) === false && $request->user()?->tenant_id === $tenant->id) {
-            throw ValidationException::withMessages(['active' => 'Você não pode desativar o tenant ao qual pertence.']);
+            throw ValidationException::withMessages(['active' => 'Você não pode desativar a empresa à qual pertence.']);
         }
 
         $old = $tenant->only(array_keys($data));

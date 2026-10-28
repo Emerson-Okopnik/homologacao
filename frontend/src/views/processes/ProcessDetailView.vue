@@ -188,7 +188,7 @@ const interactionLabels: Record<string, string> = {
           <div class="flex min-w-0 flex-col gap-6">
             <section v-if="section === 'technical'" class="rounded-xl border border-line bg-surface" aria-labelledby="sec-docs">
               <header class="flex items-center justify-between border-b border-line px-6 py-4">
-                <h2 id="sec-docs" class="font-semibold">Checklist de documentos</h2>
+                <h2 id="sec-docs" class="font-semibold">Lista de documentos</h2>
                 <span class="text-sm text-muted tabular-nums">{{ checklistDone }}/{{ checklistRequired }} obrigatórios aprovados</span>
               </header>
               <div v-if="uploadError" class="px-6 pt-4">

@@ -186,7 +186,7 @@ function reviewLabel(status: string) {
                 </li>
               </ul>
               <p class="border-t border-line pt-3 text-xs text-muted">
-                Produzidos pelo RT depois da conversão. O checklist exato do projeto é gerado pelas regras da distribuidora.
+                Produzidos pelo RT depois da conversão. A lista de requisitos do projeto é gerada pelas regras da distribuidora.
               </p>
             </section>
           </div>

@@ -50,6 +50,6 @@ final class PasswordResetController extends Controller
             throw ValidationException::withMessages(['email' => 'Link de redefinição inválido ou expirado.']);
         }
 
-        return response()->json(['message' => 'Senha redefinida com sucesso. Faça login com a nova senha.']);
+        return response()->json(['message' => 'Senha redefinida com sucesso. Acesse o sistema com a nova senha.']);
     }
 }

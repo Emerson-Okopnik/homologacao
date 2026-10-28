@@ -48,7 +48,7 @@ async function submit() {
     </form>
 
     <RouterLink :to="{ name: 'login' }" class="mt-6 inline-block text-sm font-medium text-primary hover:underline">
-      Voltar para o login
+      Voltar para a tela de acesso
     </RouterLink>
   </AuthShell>
 </template>

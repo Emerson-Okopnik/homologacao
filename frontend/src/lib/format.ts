@@ -11,9 +11,9 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 const eventLabels: Record<string, string> = {
-  'auth.login': 'Login',
-  'auth.login_failed': 'Falha de login',
-  'auth.logout': 'Logout',
+  'auth.login': 'Acesso ao sistema',
+  'auth.login_failed': 'Falha de acesso',
+  'auth.logout': 'Saída do sistema',
   'auth.password_reset': 'Senha redefinida',
   'user.created': 'Usuário criado',
   'user.updated': 'Usuário alterado',
