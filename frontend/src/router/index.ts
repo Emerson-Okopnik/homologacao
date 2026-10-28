@@ -88,7 +88,7 @@ export const router = createRouter({
           path: '',
           name: 'dashboard',
           component: () => import('@/views/DashboardView.vue'),
-          meta: { title: 'Dashboard' },
+          meta: { title: 'Visão geral' },
         },
         {
           path: 'clientes',
@@ -178,7 +178,7 @@ export const router = createRouter({
           path: 'super-admin',
           name: 'super-admin',
           component: () => import('@/views/admin/SuperAdminView.vue'),
-          meta: { superAdmin: true, title: 'Super Admin' },
+          meta: { superAdmin: true, title: 'Administração da plataforma' },
         },
         {
           path: 'acesso-negado',

@@ -45,7 +45,7 @@ services:
     <<: *php-app
     container_name: homologa-queue
     depends_on: *php-ready
-    command: ["php", "artisan", "queue:work", "--sleep=1", "--tries=3", "--backoff=10,60,300", "--timeout=60", "--max-time=3600"]
+    command: ["php", "artisan", "queue:work", "--queue=mail,default", "--sleep=1", "--tries=3", "--backoff=10,60,300", "--timeout=60", "--max-time=3600"]
     restart: unless-stopped
 
   scheduler:

@@ -50,10 +50,10 @@ enum PermissionKey: string
             self::HomologationsManage => 'Operar homologações',
             self::ProcessCancel => 'Cancelar processo',
             self::ProtocolOverride => 'Corrigir protocolo manualmente',
-            self::WorkflowConfigure => 'Configurar workflow',
+            self::WorkflowConfigure => 'Configurar fluxo de trabalho',
             self::RequirementsConfigure => 'Configurar requisitos',
             self::IntegrationsConfigure => 'Configurar integrações',
-            self::DashboardView => 'Visualizar dashboard',
+            self::DashboardView => 'Visualizar visão geral',
         };
     }
 
@@ -75,10 +75,10 @@ enum PermissionKey: string
             'homologations' => 'Homologações',
             'process' => 'Processos',
             'protocol' => 'Protocolos',
-            'workflow' => 'Workflow',
+            'workflow' => 'Fluxo de trabalho',
             'requirements' => 'Requisitos',
             'integrations' => 'Integrações',
-            'dashboard' => 'Dashboard',
+            'dashboard' => 'Visão geral',
             'portal' => 'Portal do cliente',
             default => ucfirst($group),
         };

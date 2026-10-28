@@ -34,7 +34,7 @@ export const navigation: NavSection[] = [
   {
     title: 'Operação',
     items: [
-      { label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view', to: '/' },
+      { label: 'Visão geral', icon: LayoutDashboard, permission: 'dashboard.view', to: '/' },
       { label: 'Solicitações', icon: Inbox, permission: 'projects.view', to: '/solicitacoes' },
       { label: 'Kanban', icon: SquareKanban, permission: 'homologations.view', to: '/kanban' },
       { label: 'Homologações', icon: ClipboardCheck, permission: 'homologations.view', to: '/processos' },
@@ -57,6 +57,6 @@ export const navigation: NavSection[] = [
   },
   {
     title: 'Plataforma',
-    items: [{ label: 'Super Admin', icon: ShieldCheck, permission: 'roles.view', to: '/super-admin', superAdmin: true }],
+    items: [{ label: 'Administração da plataforma', icon: ShieldCheck, permission: 'roles.view', to: '/super-admin', superAdmin: true }],
   },
 ]

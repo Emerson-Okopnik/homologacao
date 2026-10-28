@@ -36,8 +36,8 @@ async function submit() {
 
 <template>
   <BaseDialog
-    :title="tenant ? 'Editar tenant' : 'Novo tenant'"
-    :submit-label="tenant ? 'Salvar' : 'Criar tenant'"
+    :title="tenant ? 'Editar empresa' : 'Nova empresa'"
+    :submit-label="tenant ? 'Salvar' : 'Criar empresa'"
     :submitting="submitting"
     :error="error"
     @close="emit('close')"
@@ -47,7 +47,7 @@ async function submit() {
     <FormField
       v-if="!tenant"
       v-model="form.slug"
-      label="Identificador (slug)"
+      label="Identificador"
       hint="Opcional. Gerado a partir do nome se ficar em branco."
       :error="error?.firstError('slug')"
     />

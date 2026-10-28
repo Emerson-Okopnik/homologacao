@@ -162,7 +162,7 @@ async function deleteRole(role: Role) {
 
 async function toggleTenantActive(tenant: Tenant) {
   const action = tenant.active ? 'desativar' : 'reativar'
-  if (!window.confirm(`Deseja ${action} o tenant "${tenant.name}"?`)) return
+  if (!window.confirm(`Deseja ${action} a empresa "${tenant.name}"?`)) return
   error.value = null
   try {
     await api(`/admin/tenants/${tenant.id}`, { method: 'PATCH', body: { active: !tenant.active } })
@@ -237,11 +237,11 @@ onMounted(async () => {
 
 <template>
   <div>
-    <PageHeader title="Super Admin" description="Gerencie empresas (tenants), perfis de acesso e usuários da plataforma.">
+    <PageHeader title="Administração da plataforma" description="Gerencie empresas, perfis de acesso e usuários da plataforma.">
       <template #actions>
         <BaseButton @click="tenantDialog = { tenant: null }">
           <Plus class="size-4" aria-hidden="true" />
-          Novo tenant
+          Nova empresa
         </BaseButton>
       </template>
     </PageHeader>
@@ -253,11 +253,11 @@ onMounted(async () => {
     <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
       <aside class="flex w-full flex-col vg-panel lg:sticky lg:top-6 lg:w-80 lg:shrink-0">
         <div class="border-b border-line p-4">
-          <SearchInput v-model="tenantSearch" label="Buscar tenant" />
+          <SearchInput v-model="tenantSearch" label="Buscar empresa" />
         </div>
         <p v-if="loadingTenants && tenants.length === 0" class="p-4 text-sm text-muted">Carregando…</p>
-        <p v-else-if="tenants.length === 0" class="p-4 text-sm text-muted">Nenhum tenant encontrado.</p>
-        <ul class="flex max-h-[60dvh] flex-col overflow-y-auto p-2" aria-label="Tenants">
+        <p v-else-if="tenants.length === 0" class="p-4 text-sm text-muted">Nenhuma empresa encontrada.</p>
+        <ul class="flex max-h-[60dvh] flex-col overflow-y-auto p-2" aria-label="Empresas">
           <li v-for="t in tenants" :key="t.id">
             <button
               type="button"
@@ -285,7 +285,7 @@ onMounted(async () => {
         </ul>
       </aside>
 
-      <section v-if="selected" class="min-w-0 flex-1" :aria-label="`Tenant ${selected.name}`">
+      <section v-if="selected" class="min-w-0 flex-1" :aria-label="`Empresa ${selected.name}`">
         <div class="mb-4 flex flex-col gap-4 vg-panel p-5 sm:flex-row sm:items-center">
           <div class="flex min-w-0 flex-1 items-center gap-3">
             <span class="flex size-11 items-center justify-center rounded-xl bg-primary-soft text-primary">

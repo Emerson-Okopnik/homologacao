@@ -68,9 +68,25 @@ final class ApiExceptionRenderer
     private function httpMessage(HttpExceptionInterface $e): string
     {
         return match ($e->getStatusCode()) {
+            405 => 'Este método não é permitido para esta requisição.',
             419 => 'Sessão expirada. Recarregue a página.',
             429 => 'Muitas tentativas. Aguarde e tente novamente.',
-            default => $e->getMessage() !== '' ? $e->getMessage() : 'Erro na requisição.',
+            default => match ($e->getMessage()) {
+                'Bad Request', 'Bad Request.' => 'Requisição inválida.',
+                'Unauthorized', 'Unauthenticated.' => 'Sessão expirada ou não autenticada.',
+                'Forbidden', 'Access Denied.', 'This action is unauthorized.' => 'Você não tem permissão para esta ação.',
+                'Request Entity Too Large', 'Payload Too Large' => 'O arquivo enviado excede o tamanho permitido.',
+                'Service Unavailable' => 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+                '' => match ($e->getStatusCode()) {
+                    400 => 'Requisição inválida.',
+                    401 => 'Sessão expirada ou não autenticada.',
+                    403 => 'Você não tem permissão para esta ação.',
+                    413 => 'O arquivo enviado excede o tamanho permitido.',
+                    503 => 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+                    default => 'Erro na requisição.',
+                },
+                default => $e->getMessage(),
+            },
         };
     }
 }

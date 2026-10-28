@@ -48,15 +48,23 @@ class ProductionStartupTest(unittest.TestCase):
         self.state.mkdir()
         self.db_secret = self.base / 'db-secret'
         self.redis_secret = self.base / 'redis-secret'
+        self.mail_secret = self.base / 'mail-secret'
         self.db_password = 'db-test-with spaces-\'"$!'
         self.redis_password = 'redis-test-with spaces-\'"$!'
+        self.mail_password = 'smtp-test-with spaces-\'"$!'
         self.db_secret.write_text(self.db_password + '\n', encoding='utf-8')
         self.redis_secret.write_text(self.redis_password + '\n', encoding='utf-8')
+        self.mail_secret.write_text(self.mail_password + '\n', encoding='utf-8')
         self.env = dict(os.environ, MOCK_STATE=shellpath(self.state),
                         DB_PASSWORD_FILE=shellpath(self.db_secret),
                         REDIS_PASSWORD_FILE=shellpath(self.redis_secret),
+                        MAIL_PASSWORD_FILE=shellpath(self.mail_secret),
                         MOCK_REDIS_SECRET=shellpath(self.redis_secret),
                         APP_KEY='test-key-only', DB_USERNAME='homologa_app',
+                        APP_ENV='production', MAIL_MAILER='smtp', MAIL_SCHEME='smtps',
+                        MAIL_HOST='smtp.example.test', MAIL_PORT='465',
+                        MAIL_REQUIRE_TLS='true', MAIL_TIMEOUT='15', MAIL_URL='',
+                        MAIL_USERNAME='smtp-test-user', MAIL_FROM_ADDRESS='nao-responda@example.test',
                         POSTGRES_USER='postgres', POSTGRES_DB='homologa',
                         APP_DB_USERNAME='homologa_app',
                         APP_DB_PASSWORD_FILE=shellpath(self.db_secret))
@@ -65,7 +73,7 @@ printf '%s\n' "$*" >> "$MOCK_STATE/php.calls"
 test "$*" != "${MOCK_PHP_FAIL_COMMAND:-}" || exit 91
 ''')
         self.write_tool('app-server', '''
-printf '%s\n%s\n' "$DB_PASSWORD" "$REDIS_PASSWORD" > "$MOCK_STATE/app-passwords"
+printf '%s\n%s\n%s\n' "$DB_PASSWORD" "$REDIS_PASSWORD" "$MAIL_PASSWORD" > "$MOCK_STATE/app-passwords"
 ''')
         self.write_tool('psql', '''
 printf '%s\n' "$@" > "$MOCK_STATE/psql.args"
@@ -122,12 +130,13 @@ printf '%s\n' "$@" > "$MOCK_STATE/redis.args"
         result = self.run_app()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.state / 'app-passwords').read_text().splitlines(),
-                         [self.db_password, self.redis_password])
+                         [self.db_password, self.redis_password, self.mail_password])
+        self.assertNotIn(self.mail_password, result.stdout + result.stderr)
         self.assertEqual((self.state / 'php.calls').read_text().splitlines(),
                          ['artisan package:discover --ansi', 'artisan config:cache', 'artisan route:cache'])
 
     def test_app_rejects_empty_or_newline_only_secrets_before_php(self):
-        for secret in (self.db_secret, self.redis_secret):
+        for secret in (self.db_secret, self.redis_secret, self.mail_secret):
             for content in ('', '\n', '\n\n'):
                 with self.subTest(secret=secret.name, content=repr(content)):
                     original = secret.read_bytes()
@@ -140,11 +149,39 @@ printf '%s\n' "$@" > "$MOCK_STATE/redis.args"
                         secret.write_bytes(original)
 
     def test_app_rejects_missing_secret_before_php(self):
-        for variable in ('DB_PASSWORD_FILE', 'REDIS_PASSWORD_FILE'):
+        for variable in ('DB_PASSWORD_FILE', 'REDIS_PASSWORD_FILE', 'MAIL_PASSWORD_FILE'):
             with self.subTest(variable=variable):
                 result = self.run_app({variable: shellpath(self.base / 'missing-secret')})
                 self.assertNotEqual(result.returncode, 0)
                 self.assert_app_never_started()
+
+    def test_production_rejects_incomplete_or_insecure_mail_before_php(self):
+        for updates in (
+                {'MAIL_MAILER': 'log'}, {'MAIL_MAILER': 'array'}, {'MAIL_MAILER': 'failover'},
+                {'MAIL_PASSWORD_FILE': ''}, {'MAIL_USERNAME': ''}, {'MAIL_HOST': ''},
+                {'MAIL_FROM_ADDRESS': ''}, {'MAIL_REQUIRE_TLS': 'false'},
+                {'MAIL_REQUIRE_TLS': ''}, {'MAIL_SCHEME': ''}, {'MAIL_SCHEME': 'http'},
+                {'MAIL_TIMEOUT': '0'}, {'MAIL_TIMEOUT': '21'}, {'MAIL_TIMEOUT': 'abc'},
+                {'MAIL_URL': 'smtp://user:password@localhost:25'}):
+            with self.subTest(updates=updates):
+                result = self.run_app(updates)
+                self.assertNotEqual(result.returncode, 0)
+                self.assert_app_never_started()
+                self.assertNotIn(self.mail_password, result.stdout + result.stderr)
+
+    def test_production_accepts_smtp_starttls_with_tls_required(self):
+        result = self.run_app({'MAIL_SCHEME': 'smtp', 'MAIL_PORT': '587'})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_local_mailpit_does_not_require_production_credentials_or_tls(self):
+        self.write_tool('local-app', 'printf "started\\n"')
+        script = shlex.quote(shellpath(ROOT / 'backend/docker/entrypoint.sh'))
+        result = self.run_shell('exec sh ' + script + ' local-app', {
+            'APP_ENV': 'local', 'MAIL_PASSWORD_FILE': '', 'MAIL_USERNAME': '',
+            'MAIL_REQUIRE_TLS': 'false', 'MAIL_HOST': 'mailpit', 'MAIL_PORT': '1025',
+        })
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('started', result.stdout)
 
     def test_app_rejects_admin_role_and_missing_key_before_php(self):
         for updates in ({'DB_USERNAME': 'postgres'}, {'APP_KEY': ''}):

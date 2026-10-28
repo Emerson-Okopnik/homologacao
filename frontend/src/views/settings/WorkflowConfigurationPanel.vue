@@ -36,7 +36,7 @@ function saved() {
     <template v-if="data">
       <section class="workflow-phases vg-panel p-5 sm:p-6">
         <h2 class="font-semibold">Configuração das etapas</h2>
-        <p class="mt-2 text-sm text-muted">As seis fases seguem o Dashboard e o Kanban. Abra uma fase para configurar suas situações e transições.</p>
+        <p class="mt-2 text-sm text-muted">As seis fases seguem a visão geral e o quadro de processos. Abra uma fase para configurar suas situações e transições.</p>
         <div class="mt-5 divide-y divide-line">
           <details v-for="(phase, index) in phases" :key="phase.value" class="py-4" :data-phase="phase.value">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg focus-visible:ring-2 focus-visible:ring-primary">

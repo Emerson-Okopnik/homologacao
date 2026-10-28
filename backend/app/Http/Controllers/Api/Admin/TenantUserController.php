@@ -78,7 +78,7 @@ final class TenantUserController extends Controller
             'client_id' => ['sometimes', 'nullable', 'uuid'],
             'roles' => ['sometimes', 'array', 'min:1'],
             'roles.*' => ['string', 'distinct', Rule::exists('roles', 'slug')->where('tenant_id', $tenant->id)],
-        ], [], ['active' => 'status', 'roles' => 'perfis', 'is_super_admin' => 'super admin']);
+        ], [], ['active' => 'situação', 'roles' => 'perfis', 'is_super_admin' => 'superadministrador']);
 
         $actor = $request->user();
 
@@ -92,7 +92,7 @@ final class TenantUserController extends Controller
             }
 
             if ($isSelf && ($data['is_super_admin'] ?? true) === false) {
-                throw ValidationException::withMessages(['is_super_admin' => 'Você não pode remover o próprio acesso de super admin.']);
+                throw ValidationException::withMessages(['is_super_admin' => 'Você não pode remover o próprio acesso de superadministrador.']);
             }
 
             if (array_key_exists('active', $data)) {
