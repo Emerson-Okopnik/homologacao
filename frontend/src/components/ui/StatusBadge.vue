@@ -5,13 +5,13 @@ const tones = {
   success: 'bg-success-soft text-success',
   warning: 'bg-warning-soft text-warning',
   danger: 'bg-danger-soft text-danger',
-  info: 'bg-primary-soft text-primary',
+  info: 'bg-blue-soft text-corporate-blue',
   neutral: 'bg-canvas text-muted',
 }
 </script>
 
 <template>
-  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="tones[tone]">
+  <span class="inline-flex max-w-full items-center rounded-md px-2.5 py-1 text-[10px] font-medium leading-[18px]" :class="tones[tone]">
     <slot />
   </span>
 </template>

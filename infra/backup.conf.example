@@ -1,0 +1,12 @@
+# Trusted Bash file. Install as /etc/homologa-backup.conf, root:root mode 0600.
+# Only the PUBLIC age recipient belongs here; keep the private identity off the VM.
+PROJECT_DIR=/opt/homologa
+BACKUP_ROOT=/var/backups/homologa
+AGE_RECIPIENT=age1REPLACE_WITH_PUBLIC_RECIPIENT
+OCI_NAMESPACE=REPLACE_WITH_OBJECT_STORAGE_NAMESPACE
+OCI_BUCKET=bk-homologa-prod
+OCI_REGION=REPLACE_WITH_HOME_REGION
+OCI_BIN=/opt/oci-cli/bin/oci
+MAX_ARCHIVE_BYTES=1000000000
+# find -mtime +2 keeps approximately two to three days after verified uploads.
+LOCAL_RETENTION_DAYS=2

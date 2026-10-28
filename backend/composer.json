@@ -4,7 +4,7 @@
     "description": "Homologa Solar — sistema standalone de homologação fotovoltaica (API).",
     "license": "proprietary",
     "require": {
-        "php": "^8.4",
+        "php": "~8.5.12",
         "laravel/framework": "^13.0",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",

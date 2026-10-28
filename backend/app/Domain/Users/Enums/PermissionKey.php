@@ -29,10 +29,12 @@ enum PermissionKey: string
     case RequirementsConfigure = 'requirements.configure';
     case IntegrationsConfigure = 'integrations.configure';
     case DashboardView = 'dashboard.view';
+    case PortalAccess = 'portal.access';
 
     public function label(): string
     {
         return match ($this) {
+            self::PortalAccess => 'Acessar portal do cliente',
             self::UsersView => 'Visualizar usuários',
             self::UsersManage => 'Gerenciar usuários',
             self::RolesView => 'Visualizar perfis',
@@ -58,5 +60,27 @@ enum PermissionKey: string
     public function group(): string
     {
         return explode('.', $this->value)[0];
+    }
+
+    public static function groupLabel(string $group): string
+    {
+        return match ($group) {
+            'users' => 'Usuários',
+            'roles' => 'Perfis',
+            'audit' => 'Auditoria',
+            'clients' => 'Clientes',
+            'technical_responsibles' => 'Responsáveis técnicos',
+            'projects' => 'Projetos',
+            'documents' => 'Documentos',
+            'homologations' => 'Homologações',
+            'process' => 'Processos',
+            'protocol' => 'Protocolos',
+            'workflow' => 'Workflow',
+            'requirements' => 'Requisitos',
+            'integrations' => 'Integrações',
+            'dashboard' => 'Dashboard',
+            'portal' => 'Portal do cliente',
+            default => ucfirst($group),
+        };
     }
 }

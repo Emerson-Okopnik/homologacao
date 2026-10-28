@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
 
 /**
+ * @implements Scope<Model>
+ *
  * Fail-closed: sem tenant resolvido, a query não retorna nenhuma linha.
  * Bypass só é possível de forma explícita com withoutGlobalScope(TenantScope::class).
  */

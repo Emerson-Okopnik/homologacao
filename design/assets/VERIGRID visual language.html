@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VERIGRID visual language</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0A1F5C;--blue:#1E3A8A;--em:#0E9F6E;--teal:#19B98A;--white:#fff;--gray:#F5F8FB;--bg:#F5F8FB;--ink:#0A1F5C;--mut:#5B6B8C;--card:#fff;--line:#DCE4EE;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#071238;--ink:#EAF0FA;--mut:#9FB0D0;--card:#0C1A4A;--line:#1C2E6B}}
+:root[data-theme="dark"]{--bg:#071238;--ink:#EAF0FA;--mut:#9FB0D0;--card:#0C1A4A;--line:#1C2E6B}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Sora,system-ui,Segoe UI,Arial,sans-serif;line-height:1.55}
+main{max-width:1180px;margin:0 auto;padding:40px 20px 64px}
+h1{font-weight:300;font-size:clamp(28px,4vw,44px);margin:0 0 8px;letter-spacing:-.01em}
+h2{font-weight:600;font-size:18px;margin:48px 0 6px}
+p{color:var(--mut);margin:0 0 16px;max-width:68ch;font-size:15px}
+.frame{border-radius:6px;overflow:hidden;border:1px solid var(--line);background:var(--card)}
+.frame svg{display:block;width:100%;height:auto}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.sw{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.sw div{border-radius:6px;padding:56px 12px 10px;font-size:12px;border:1px solid var(--line)}
+.sw b{display:block;font-weight:600}
+ul{color:var(--mut);font-size:15px;padding-left:18px;max-width:72ch}
+</style></head><body><main>
+<h1>VERIGRID visual language</h1>
+<p>A system built from the logo’s angular planes: diagonal cuts, stacked modules and a navy-to-emerald progression. Every composition keeps one clear zone free for headlines and interface elements.</p>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+<linearGradient id="gNE" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1E3A8A"/><stop offset="1" stop-color="#0E9F6E"/></linearGradient>
+<linearGradient id="gN" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A1F5C"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient>
+<linearGradient id="gE" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#19B98A"/><stop offset="1" stop-color="#0E9F6E"/></linearGradient>
+<linearGradient id="gBgD" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071238"/><stop offset=".6" stop-color="#0A1F5C"/><stop offset="1" stop-color="#0B3B5A"/></linearGradient>
+<linearGradient id="gBgL" x1="0" y1="0" x2="1" y2="0"><stop offset=".35" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6EEF6"/></linearGradient>
+<linearGradient id="gFlow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#19B98A" stop-opacity="0"/><stop offset=".6" stop-color="#19B98A"/><stop offset="1" stop-color="#7FE3C4"/></linearGradient>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+<pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1.2" fill="#1E3A8A" opacity=".22"/></pattern>
+<pattern id="gridL" width="56" height="56" patternUnits="userSpaceOnUse"><path d="M56 0H0V56" fill="none" stroke="#1E3A8A" stroke-width=".6" opacity=".12"/></pattern>
+<pattern id="gridD" width="56" height="56" patternUnits="userSpaceOnUse"><path d="M56 0H0V56" fill="none" stroke="#7FA6E8" stroke-width=".6" opacity=".14"/></pattern>
+</defs></svg>
+
+<h2>Primary hero, light</h2>
+<p>Left 45% stays empty for headline and buttons. Angular planes and a node network anchor the right side.</p>
+<div class="frame"><svg viewBox="0 0 1600 700" role="img" aria-label="Light hero composition with angular planes and network nodes">
+<rect width="1600" height="700" fill="url(#gBgL)"/><rect width="1600" height="700" fill="url(#gridL)"/>
+<rect x="760" y="0" width="840" height="700" fill="url(#dots)"/>
+<polygon points="1020,700 1240,150 1600,40 1600,700" fill="url(#gN)" opacity=".92"/>
+<polygon points="1240,150 1600,40 1600,260 1330,330" fill="#fff" opacity=".07"/>
+<polygon points="900,700 1090,470 1380,560 1260,700" fill="url(#gE)" opacity=".9"/>
+<polygon points="1090,470 1190,330 1380,560" fill="#fff" opacity=".12"/>
+<polygon points="1380,560 1600,470 1600,700 1480,700" fill="url(#gNE)" opacity=".85"/>
+<line x1="1010" y1="330" x2="1250" y2="250" stroke="#fff" stroke-width="5" opacity=".9"/>
+<g fill="none" stroke="#1E3A8A" stroke-width="1.2" opacity=".55">
+<path d="M700 120 L900 190 L1010 110 L1210 90 L1420 170"/><path d="M900 190 L960 330 L1130 300 L1210 90"/><path d="M960 330 L860 470 L1050 560"/><path d="M1130 300 L1420 170"/></g>
+<g fill="#fff" stroke="#0E9F6E" stroke-width="2.5"><circle cx="700" cy="120" r="6"/><circle cx="900" cy="190" r="8"/><circle cx="1010" cy="110" r="6"/><circle cx="1210" cy="90" r="9"/><circle cx="1420" cy="170" r="7"/><circle cx="960" cy="330" r="8"/><circle cx="1130" cy="300" r="6"/><circle cx="860" cy="470" r="6"/><circle cx="1050" cy="560" r="7"/></g>
+<circle cx="1210" cy="90" r="22" fill="#19B98A" opacity=".25" filter="url(#glow)"/>
+</svg></div>
+
+<h2>Primary hero, dark</h2>
+<p>Deep navy field with energy-flow trails and a restrained emerald glow. Used for platform and dashboard entry points.</p>
+<div class="frame"><svg viewBox="0 0 1600 700" role="img" aria-label="Dark hero composition with energy flow trails">
+<rect width="1600" height="700" fill="url(#gBgD)"/><rect width="1600" height="700" fill="url(#gridD)"/>
+<polygon points="1100,0 1600,0 1600,700 820,700" fill="#1E3A8A" opacity=".28"/>
+<polygon points="1240,0 1600,0 1600,430" fill="#0E9F6E" opacity=".16"/>
+<polygon points="820,700 1120,330 1380,700" fill="#fff" opacity=".04"/>
+<g fill="none" stroke-linecap="round">
+<path d="M560 560 H800 L900 460 H1180 L1280 360 H1600" stroke="url(#gFlow)" stroke-width="3"/>
+<path d="M560 560 H800 L900 460 H1180 L1280 360 H1600" stroke="#19B98A" stroke-width="8" opacity=".35" filter="url(#glow)"/>
+<path d="M640 640 H960 L1040 560 H1400 L1470 490 H1600" stroke="url(#gFlow)" stroke-width="1.6" opacity=".8"/>
+<path d="M700 300 H980 L1060 220 H1360 L1440 140 H1600" stroke="#7FA6E8" stroke-width="1.2" opacity=".5"/></g>
+<g fill="#071238" stroke="#7FE3C4" stroke-width="2"><circle cx="900" cy="460" r="7"/><circle cx="1180" cy="460" r="7"/><circle cx="1280" cy="360" r="9"/><circle cx="1040" cy="560" r="6"/><circle cx="1060" cy="220" r="6"/><circle cx="1440" cy="140" r="6"/></g>
+<circle cx="1280" cy="360" r="26" fill="#19B98A" opacity=".4" filter="url(#glow)"/>
+<line x1="1000" y1="150" x2="1180" y2="90" stroke="#fff" stroke-width="3" opacity=".7"/>
+</svg></div>
+
+<h2>Supporting modules</h2>
+<div class="grid">
+<div class="frame"><svg viewBox="0 0 400 300" role="img" aria-label="Modular grid pattern">
+<rect width="400" height="300" fill="#F5F8FB"/>
+<g><polygon points="40,40 160,40 120,120 40,120" fill="#0A1F5C"/><polygon points="170,40 260,40 260,100 170,100" fill="#1E3A8A" opacity=".85"/><polygon points="270,40 360,40 360,120 300,120" fill="#0E9F6E"/>
+<polygon points="40,130 130,130 130,210 40,210" fill="#19B98A" opacity=".8"/><polygon points="140,130 260,130 220,260 140,260" fill="#1E3A8A"/><polygon points="270,130 360,130 360,260 300,260" fill="#0A1F5C" opacity=".9"/>
+<polygon points="40,220 130,220 130,260 40,260" fill="none" stroke="#1E3A8A" stroke-width="1.2"/></g>
+<line x1="60" y1="80" x2="110" y2="80" stroke="#fff" stroke-width="3"/></svg></div>
+<div class="frame"><svg viewBox="0 0 400 300" role="img" aria-label="Network node composition">
+<rect width="400" height="300" fill="#0A1F5C"/><rect width="400" height="300" fill="url(#gridD)"/>
+<g stroke="#7FE3C4" stroke-width="1.2" fill="none" opacity=".7"><path d="M60 220 L140 140 L240 170 L320 70"/><path d="M140 140 L170 60 L320 70"/><path d="M240 170 L330 230"/></g>
+<g fill="#0A1F5C" stroke="#19B98A" stroke-width="2.5"><circle cx="60" cy="220" r="7"/><circle cx="140" cy="140" r="10"/><circle cx="240" cy="170" r="7"/><circle cx="320" cy="70" r="9"/><circle cx="170" cy="60" r="6"/><circle cx="330" cy="230" r="6"/></g>
+<circle cx="320" cy="70" r="24" fill="#19B98A" opacity=".35" filter="url(#glow)"/></svg></div>
+<div class="frame"><svg viewBox="0 0 400 300" role="img" aria-label="Diagonal cut layered surface">
+<rect width="400" height="300" fill="#fff"/>
+<polygon points="0,0 400,0 400,120 0,260" fill="url(#gN)"/>
+<polygon points="0,260 400,120 400,300 0,300" fill="url(#gE)" opacity=".9"/>
+<polygon points="0,200 400,60 400,120 0,260" fill="#fff" opacity=".1"/>
+<line x1="40" y1="215" x2="200" y2="158" stroke="#fff" stroke-width="3" opacity=".85"/></svg></div>
+</div>
+
+<h2>Palette</h2>
+<div class="sw">
+<div style="background:#0A1F5C;color:#fff"><b>Deep navy</b>#0A1F5C</div>
+<div style="background:#1E3A8A;color:#fff"><b>Corporate blue</b>#1E3A8A</div>
+<div style="background:#0E9F6E;color:#fff"><b>Emerald</b>#0E9F6E</div>
+<div style="background:#19B98A;color:#06241B"><b>Teal green</b>#19B98A</div>
+<div style="background:#F5F8FB;color:#0A1F5C"><b>Cool gray</b>#F5F8FB</div>
+<div style="background:#fff;color:#0A1F5C"><b>White</b>#FFFFFF</div>
+</div>
+
+<h2>Rules of the system</h2>
+<ul>
+<li>One white slash per composition, echoing the cut in the logo symbol. Never repeat it more than once per frame.</li>
+<li>Planes use only the navy-to-emerald progression. Transparency and thin lines add depth; never add a new hue.</li>
+<li>Nodes sit on line intersections. One node per composition may glow, in emerald only.</li>
+<li>Keep at least 40% of any frame empty and flat for headlines, buttons and interface elements.</li>
+<li>Do not redraw, rotate or distort the VERIGRID logo. Use it only as supplied.</li>
+</ul>
+</main></body></html>

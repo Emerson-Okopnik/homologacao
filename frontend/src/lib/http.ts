@@ -33,6 +33,12 @@ export function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null
 }
 
+function backendRoot(): string {
+  // Aceita o origin da API ou sua URL com /api, sem duplicar o prefixo.
+  const configured = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '/api'
+  return configured.replace(/\/api$/, '')
+}
+
 export function buildUrl(path: string, query?: Query): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query ?? {})) {
@@ -40,12 +46,19 @@ export function buildUrl(path: string, query?: Query): string {
     params.set(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
   }
   const qs = params.toString()
-  return `/api${path}${qs ? `?${qs}` : ''}`
+  const endpoint = path.replace(/^\/+/, '').replace(/^api(?:\/|$)/, '')
+  return `${backendRoot()}/api${endpoint ? `/${endpoint}` : ''}${qs ? `?${qs}` : ''}`
 }
 
 async function ensureCsrfCookie(): Promise<void> {
   if (readCookie('XSRF-TOKEN')) return
-  await fetch('/sanctum/csrf-cookie', { credentials: 'include' })
+  const response = await fetch(`${backendRoot()}/sanctum/csrf-cookie`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, messageForStatus(response.status), {}, response.headers.get('X-Correlation-Id'))
+  }
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -89,6 +102,31 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   return payload as T
+}
+
+export async function upload<T>(path: string, form: FormData): Promise<T> {
+  await ensureCsrfCookie()
+  const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+  const token = readCookie('XSRF-TOKEN')
+  if (token) headers['X-XSRF-TOKEN'] = token
+
+  const response = await fetch(buildUrl(path), { method: 'POST', headers, credentials: 'include', body: form })
+  const payload = (await response.json().catch(() => ({}))) as { message?: string; errors?: Record<string, string[]> }
+
+  if (!response.ok) {
+    if (response.status === 401 && unauthorizedHandler) unauthorizedHandler()
+    throw new ApiError(
+      response.status,
+      payload.message ?? messageForStatus(response.status),
+      payload.errors ?? {},
+      response.headers.get('X-Correlation-Id'),
+    )
+  }
+  return payload as T
+}
+
+export function toApiError(e: unknown): ApiError {
+  return e instanceof ApiError ? e : new ApiError(0, 'Falha de conexão com o servidor.')
 }
 
 function messageForStatus(status: number): string {

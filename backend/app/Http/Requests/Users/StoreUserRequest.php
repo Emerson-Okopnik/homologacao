@@ -22,6 +22,7 @@ final class StoreUserRequest extends FormRequest
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', Password::min(10)->letters()->numbers()->mixedCase()],
             'active' => ['sometimes', 'boolean'],
+            'client_id' => ['sometimes', 'nullable', 'uuid'],
             'roles' => ['required', 'array', 'min:1'],
             'roles.*' => ['string', 'distinct', Rule::exists('roles', 'slug')->where('tenant_id', $tenantId)],
         ];

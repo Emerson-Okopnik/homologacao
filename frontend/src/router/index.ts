@@ -8,6 +8,8 @@ declare module 'vue-router' {
     public?: boolean
     guestOnly?: boolean
     permission?: PermissionKey
+    superAdmin?: boolean
+    portal?: boolean
     title?: string
   }
 }
@@ -36,14 +38,123 @@ export const router = createRouter({
       meta: { public: true, guestOnly: true, title: 'Redefinir senha' },
     },
     {
+      path: '/portal',
+      component: () => import('@/layouts/PortalLayout.vue'),
+      meta: { portal: true },
+      children: [
+        {
+          path: '',
+          name: 'portal-home',
+          component: () => import('@/views/portal/PortalHomeView.vue'),
+          meta: { portal: true, title: 'Minhas solicitações' },
+        },
+        {
+          path: 'solicitacoes/nova',
+          name: 'portal-request-new',
+          component: () => import('@/views/portal/PortalRequestFormView.vue'),
+          meta: { portal: true, title: 'Nova solicitação' },
+        },
+        {
+          path: 'solicitacoes/:id/editar',
+          name: 'portal-request-edit',
+          component: () => import('@/views/portal/PortalRequestFormView.vue'),
+          meta: { portal: true, title: 'Editar solicitação' },
+        },
+        {
+          path: 'solicitacoes/:id',
+          name: 'portal-request',
+          component: () => import('@/views/portal/PortalRequestDetailView.vue'),
+          meta: { portal: true, title: 'Solicitação' },
+        },
+      ],
+    },
+    {
       path: '/',
       component: AppLayout,
       children: [
+        {
+          path: 'solicitacoes',
+          name: 'client-requests',
+          component: () => import('@/views/requests/ClientRequestsView.vue'),
+          meta: { permission: 'projects.view', title: 'Solicitações de clientes' },
+        },
+        {
+          path: 'solicitacoes/:id',
+          name: 'client-request-detail',
+          component: () => import('@/views/requests/ClientRequestDetailView.vue'),
+          meta: { permission: 'projects.view', title: 'Solicitação' },
+        },
         {
           path: '',
           name: 'dashboard',
           component: () => import('@/views/DashboardView.vue'),
           meta: { title: 'Dashboard' },
+        },
+        {
+          path: 'clientes',
+          name: 'clients',
+          component: () => import('@/views/clients/ClientsView.vue'),
+          meta: { permission: 'clients.view', title: 'Clientes' },
+        },
+        {
+          path: 'clientes/:id',
+          name: 'client-detail',
+          component: () => import('@/views/clients/ClientDetailView.vue'),
+          meta: { permission: 'clients.view', title: 'Cliente' },
+        },
+        {
+          path: 'projetos',
+          name: 'projects',
+          component: () => import('@/views/projects/ProjectsView.vue'),
+          meta: { permission: 'projects.view', title: 'Projetos' },
+        },
+        {
+          path: 'projetos/novo',
+          name: 'project-new',
+          component: () => import('@/views/projects/ProjectFormView.vue'),
+          meta: { permission: 'projects.manage', title: 'Novo projeto' },
+        },
+        {
+          path: 'projetos/:id',
+          name: 'project-edit',
+          component: () => import('@/views/projects/ProjectFormView.vue'),
+          meta: { permission: 'projects.manage', title: 'Editar projeto' },
+        },
+        {
+          path: 'projetos/:id/dados-tecnicos',
+          name: 'project-technical',
+          component: () => import('@/views/projects/ProjectTechnicalView.vue'),
+          meta: { permission: 'projects.view', title: 'Dados técnicos' },
+        },
+        {
+          path: 'kanban',
+          name: 'kanban',
+          component: () => import('@/views/processes/ProcessesView.vue'),
+          meta: { permission: 'homologations.view', title: 'Kanban' },
+        },
+        {
+          path: 'processos',
+          name: 'processes',
+          component: () => import('@/views/processes/ProcessesView.vue'),
+          meta: { permission: 'homologations.view', title: 'Homologações' },
+        },
+        {
+          path: 'processos/:id',
+          name: 'process-detail',
+          component: () => import('@/views/processes/ProcessDetailView.vue'),
+          meta: { permission: 'homologations.view', title: 'Processo' },
+        },
+        {
+          path: 'documentos',
+          name: 'documents',
+          component: () => import('@/views/documents/DocumentsView.vue'),
+          meta: { permission: 'documents.view', title: 'Documentos' },
+        },
+        {
+          path: 'cadastros',
+          name: 'catalog',
+          component: () => import('@/views/catalog/CatalogView.vue'),
+          meta: { permission: 'projects.view', title: 'Cadastros técnicos' },
         },
         {
           path: 'usuarios',
@@ -56,6 +167,18 @@ export const router = createRouter({
           name: 'audit',
           component: () => import('@/views/audit/AuditView.vue'),
           meta: { permission: 'audit.view', title: 'Auditoria' },
+        },
+        {
+          path: 'configuracoes',
+          name: 'settings',
+          component: () => import('@/views/settings/SettingsView.vue'),
+          meta: { permission: 'workflow.configure', title: 'Configurações' },
+        },
+        {
+          path: 'super-admin',
+          name: 'super-admin',
+          component: () => import('@/views/admin/SuperAdminView.vue'),
+          meta: { superAdmin: true, title: 'Super Admin' },
         },
         {
           path: 'acesso-negado',
@@ -79,11 +202,22 @@ router.beforeEach(async (to) => {
   await auth.ensureLoaded()
 
   if (to.meta.public) {
-    return to.meta.guestOnly && auth.status === 'authenticated' ? { name: 'dashboard' } : true
+    if (to.meta.guestOnly && auth.status === 'authenticated') {
+      return auth.isClient ? { name: 'portal-home' } : { name: 'dashboard' }
+    }
+    return true
   }
 
   if (auth.status !== 'authenticated') {
     return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} }
+  }
+
+  // Cliente (titular) só navega no portal; a equipe não usa o portal.
+  if (auth.isClient && !to.meta.portal) return { name: 'portal-home' }
+  if (!auth.isClient && to.meta.portal) return { name: 'dashboard' }
+
+  if (to.meta.superAdmin && !auth.isSuperAdmin) {
+    return { name: 'forbidden' }
   }
 
   if (to.meta.permission && !auth.can(to.meta.permission)) {
@@ -94,5 +228,5 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} · Homologa Solar` : 'Homologa Solar'
+  document.title = to.meta.title ? `${to.meta.title} · VERIGRID` : 'VERIGRID · Homologação fotovoltaica'
 })

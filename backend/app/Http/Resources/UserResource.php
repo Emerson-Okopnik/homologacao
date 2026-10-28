@@ -26,6 +26,11 @@ final class UserResource extends JsonResource
             'last_login_at' => $this->last_login_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
             'roles' => RoleResource::collection($this->whenLoaded('roles')),
+            'client' => $this->whenLoaded('client', fn () => $this->client ? ['id' => $this->client->uuid, 'name' => $this->client->name] : null),
+            'is_super_admin' => $this->when(
+                (bool) $request->user()?->is_super_admin,
+                fn () => $this->isSuperAdmin(),
+            ),
         ];
     }
 }

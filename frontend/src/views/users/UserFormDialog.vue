@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, useTemplateRef } from 'vue'
+import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue'
 import { X } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import FormField from '@/components/ui/FormField.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
+import PortalClientField from './PortalClientField.vue'
 import { api, ApiError } from '@/lib/http'
 import type { Role, User } from '@/types/api'
 
@@ -18,7 +19,9 @@ const form = reactive({
   password: '',
   active: props.user?.active ?? true,
   roles: props.user?.roles?.map((role) => role.slug) ?? [],
+  client_id: props.user?.client?.id ?? '',
 })
+const isPortal = computed(() => props.roles.some(role => form.roles.includes(role.slug) && (role.slug === 'cliente' || role.permissions?.includes('portal.access'))))
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
 
@@ -27,7 +30,7 @@ onMounted(() => dialog.value?.showModal())
 async function submit() {
   submitting.value = true
   error.value = null
-  const body: Record<string, unknown> = { ...form }
+  const body: Record<string, unknown> = { ...form, client_id: isPortal.value ? form.client_id || null : null }
   if (props.user && !form.password) delete body.password
   try {
     if (props.user) {
@@ -92,6 +95,7 @@ async function submit() {
           </div>
           <p v-if="error?.firstError('roles')" class="mt-1.5 text-xs text-danger">{{ error.firstError('roles') }}</p>
         </fieldset>
+        <PortalClientField v-if="isPortal" v-model="form.client_id" :error="error?.firstError('client_id')" />
 
         <label v-if="user" class="flex items-center gap-2 text-sm">
           <input v-model="form.active" type="checkbox" class="size-4 accent-primary" />

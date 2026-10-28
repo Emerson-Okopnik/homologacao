@@ -25,6 +25,7 @@ final class UpdateUserRequest extends FormRequest
             'email' => ['sometimes', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($target->id)],
             'password' => ['sometimes', 'nullable', 'string', Password::min(10)->letters()->numbers()->mixedCase()],
             'active' => ['sometimes', 'boolean'],
+            'client_id' => ['sometimes', 'nullable', 'uuid'],
             'roles' => ['sometimes', 'array', 'min:1'],
             'roles.*' => ['string', 'distinct', Rule::exists('roles', 'slug')->where('tenant_id', $tenantId)],
         ];

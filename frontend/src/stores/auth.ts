@@ -17,6 +17,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = computed(() => me.value?.user ?? null)
   const tenant = computed(() => me.value?.tenant ?? null)
   const permissions = computed(() => new Set(me.value?.permissions ?? []))
+  const isSuperAdmin = computed(() => me.value?.is_super_admin === true)
+  /** Usuário do portal do cliente (titular). Usa só o /portal. */
+  const isClient = computed(() => permissions.value.has('portal.access') || Boolean(me.value?.client))
+  const portalClient = computed(() => me.value?.client ?? null)
 
   function can(permission: PermissionKey): boolean {
     return permissions.value.has(permission)
@@ -60,5 +64,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { me, status, user, tenant, can, ensureLoaded, login, logout, setSession }
+  return { me, status, user, tenant, isSuperAdmin, isClient, portalClient, can, ensureLoaded, login, logout, setSession }
 })

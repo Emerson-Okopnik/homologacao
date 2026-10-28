@@ -1,0 +1,121 @@
+name: Validate application
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  infrastructure:
+    name: Compose and backup safeguards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate production Compose without starting services
+        run: python3 scripts/validate-compose.py
+      - name: Check shell syntax
+        run: |
+          for file in scripts/*.sh backend/docker/*.sh docker/postgres/production/*.sh; do
+            bash -n "$file" || exit
+          done
+      - name: Test backup, isolated restore and startup safeguards
+        run: python3 -m unittest discover -s scripts/tests -v
+
+  frontend:
+    name: Frontend tests and production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.28.2
+          package_json_file: frontend/package.json
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.node-version
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install locked frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run frontend tests
+        run: pnpm test
+      - name: Build frontend for the external API
+        run: pnpm build
+        env:
+          VITE_API_URL: https://api.example.com/api
+
+  backend:
+    name: PHP 8.5.12+ tests with PostgreSQL 17
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: homologa_test
+          POSTGRES_USER: homologa
+          POSTGRES_PASSWORD: ci-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U homologa -d homologa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      APP_ENV: testing
+      APP_DEBUG: "false"
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: homologa_test
+      DB_USERNAME: homologa
+      DB_PASSWORD: ci-test-only
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: bcmath, curl, dom, fileinfo, intl, mbstring, pcntl, pdo_pgsql, pgsql, zip
+          coverage: none
+          tools: composer:v2
+        env:
+          update: true
+      - name: Require the patched PHP 8.5 runtime
+        run: php -r 'if (PHP_MAJOR_VERSION !== 8 || PHP_MINOR_VERSION !== 5 || version_compare(PHP_VERSION, "8.5.12", "<")) { fwrite(STDERR, "PHP 8.5.12 or newer in the 8.5 branch is required.\n"); exit(1); } echo "PHP ", PHP_VERSION, PHP_EOL;'
+      - name: Prepare Laravel writable directories
+        run: mkdir -p storage/app/private storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache resources/views
+      - name: Validate Composer configuration
+        run: composer validate --strict
+      - name: Install locked backend dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Check PHP requirements
+        run: composer check-platform-reqs
+      - name: Run unit and feature tests against the disposable CI database
+        run: php vendor/bin/pest

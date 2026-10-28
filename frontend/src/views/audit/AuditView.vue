@@ -1,83 +1,78 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { History, RotateCcw, ShieldCheck } from '@lucide/vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import FormField from '@/components/ui/FormField.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import PaginationBar from '@/components/ui/PaginationBar.vue'
+import SelectField from '@/components/ui/SelectField.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
-import { api } from '@/lib/http'
-import { formatDateTime, formatEvent } from '@/lib/format'
+import { auditEventOptions } from '@/lib/audit'
+import { api, ApiError } from '@/lib/http'
 import type { AuditLog, Paginated } from '@/types/api'
+import AuditLogItem from './AuditLogItem.vue'
 
-const filters = reactive({ event: '', page: 1 })
-const query = computed(() => ({ ...filters }))
-
-const { data, error, loading } = useApiQuery(query, (q) =>
-  api<Paginated<AuditLog>>('/audit-logs', { query: { event: q.event, page: q.page } }),
-)
-
+const filters = reactive({ event: '', from: '', to: '', page: 1, per_page: 25 })
 const expanded = ref<string | null>(null)
+const dateError = computed(() => filters.from && filters.to && filters.from > filters.to ? 'A data final deve ser igual ou posterior à data inicial.' : '')
+const filtered = computed(() => !!(filters.event || filters.from || filters.to))
+watch([() => filters.event, () => filters.from, () => filters.to, () => filters.per_page], () => (filters.page = 1))
+const query = computed(() => ({ ...filters }))
+watch(query, () => (expanded.value = null))
 
-function toggle(id: string) {
-  expanded.value = expanded.value === id ? null : id
-}
+const { data, error, loading } = useApiQuery(query, (q) => {
+  if (q.from && q.to && q.from > q.to) return Promise.reject(new ApiError(422, 'A data final deve ser igual ou posterior à data inicial.'))
+  return api<Paginated<AuditLog>>('/audit-logs', {
+    query: { ...q, event_match: q.event ? (q.event.endsWith('.') ? 'prefix' : 'exact') : undefined },
+  })
+})
 
-function changes(log: AuditLog): string {
-  return JSON.stringify({ antes: log.old_values, depois: log.new_values, metadados: log.metadata }, null, 2)
+function clearFilters() {
+  filters.event = ''
+  filters.from = ''
+  filters.to = ''
 }
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
-    <PageHeader title="Auditoria" description="Registro imutável das ações realizadas no ambiente." />
+  <div class="mx-auto w-full max-w-[1240px]">
+    <PageHeader title="Auditoria" description="Acompanhe acessos, alterações e ações realizadas no ambiente.">
+      <template #actions>
+        <span class="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-[11px] text-muted"><ShieldCheck class="size-4 text-primary" aria-hidden="true" />Registros somente para consulta</span>
+      </template>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-2xl border border-line bg-surface">
-      <div class="border-b border-line p-4">
-        <label class="flex max-w-xs flex-col gap-1.5 text-sm">
-          <span class="font-medium">Evento</span>
-          <select
-            v-model="filters.event"
-            class="h-10 rounded-lg border border-line bg-canvas px-3 focus:border-primary focus:outline-none"
-            @change="filters.page = 1"
-          >
-            <option value="">Todos</option>
-            <option value="auth.login">Login</option>
-            <option value="auth.login_failed">Falha de login</option>
-            <option value="auth.logout">Logout</option>
-            <option value="user.created">Usuário criado</option>
-            <option value="user.updated">Usuário alterado</option>
-          </select>
-        </label>
+    <div class="vg-panel overflow-hidden">
+      <div class="grid gap-4 border-b border-line p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-[minmax(200px,1.5fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto] lg:items-start">
+        <SelectField v-model="filters.event" label="Evento" placeholder="Todos os eventos" :options="auditEventOptions" />
+        <FormField v-model="filters.from" label="Data inicial" type="date" :error="error?.firstError('from')" />
+        <FormField v-model="filters.to" label="Data final" type="date" :error="dateError || error?.firstError('to')" />
+        <BaseButton variant="secondary" class="self-end lg:mt-[26px] lg:self-start" :disabled="!filtered" @click="clearFilters"><RotateCcw class="size-3.5" aria-hidden="true" />Limpar filtros</BaseButton>
       </div>
 
-      <div v-if="error" class="p-4">
-        <InlineAlert :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
+      <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-4 sm:px-5">
+        <h2 class="flex items-center gap-2 text-xs font-semibold"><History class="size-4 text-primary" aria-hidden="true" />Histórico de atividades</h2>
+        <p v-if="data" class="text-[11px] text-muted" role="status">{{ data.meta.total }} {{ data.meta.total === 1 ? 'evento encontrado' : 'eventos encontrados' }}</p>
       </div>
 
-      <ul v-else class="divide-y divide-line" :aria-busy="loading">
-        <li v-for="log in data?.data ?? []" :key="log.id" :class="loading && 'opacity-60'">
-          <button
-            type="button"
-            class="flex w-full flex-col gap-1 px-4 py-3 text-left hover:bg-canvas sm:flex-row sm:items-center sm:gap-4"
-            :aria-expanded="expanded === log.id"
-            @click="toggle(log.id)"
-          >
-            <span class="w-36 shrink-0 text-xs text-muted tabular-nums">{{ formatDateTime(log.created_at) }}</span>
-            <span class="font-medium">{{ formatEvent(log.event) }}</span>
-            <span class="text-sm text-muted">{{ log.actor?.name ?? 'Sistema' }}</span>
-            <span class="text-xs text-muted sm:ml-auto">{{ log.ip_address }}</span>
-          </button>
-          <div v-if="expanded === log.id" class="bg-canvas px-4 pb-4">
-            <p v-if="log.justification" class="pt-3 text-sm"><strong>Justificativa:</strong> {{ log.justification }}</p>
-            <pre class="mt-3 overflow-x-auto rounded-lg bg-sidebar p-3 font-mono text-xs text-white">{{ changes(log) }}</pre>
-            <p v-if="log.correlation_id" class="mt-2 font-mono text-[11px] text-muted">ref: {{ log.correlation_id }}</p>
-          </div>
-        </li>
-        <li v-if="!loading && data && data.data.length === 0" class="px-4 py-12 text-center text-sm text-muted">
-          Nenhum evento registrado.
-        </li>
-      </ul>
+      <div v-if="error && !dateError" class="px-4 pb-4 sm:px-5"><InlineAlert :correlation-id="error.correlationId">{{ error.message }}</InlineAlert></div>
+      <p v-else-if="loading && !data" class="border-t border-line px-4 py-14 text-center text-xs text-muted" role="status">Carregando eventos de auditoria…</p>
+      <template v-else>
+        <div class="hidden grid-cols-[160px_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,.8fr)_24px] gap-5 border-y border-line bg-canvas px-5 py-3 text-[10px] font-medium uppercase tracking-wide text-muted lg:grid" aria-hidden="true">
+          <span>Data e hora</span><span>Evento / recurso</span><span>Responsável</span><span>Endereço IP</span><span />
+        </div>
+        <ul class="divide-y divide-line" :aria-busy="loading" aria-label="Eventos de auditoria">
+          <AuditLogItem v-for="log in data?.data ?? []" :key="log.id" :log="log" :expanded="expanded === log.id" :loading="loading || !!dateError" @toggle="expanded = expanded === log.id ? null : log.id" />
+          <li v-if="!loading && data && data.data.length === 0" class="flex flex-col items-center gap-2 px-4 py-14 text-center text-xs text-muted">
+            <History class="mb-2 size-7 text-muted" aria-hidden="true" />
+            <p class="font-medium text-ink">{{ filtered ? 'Nenhum evento encontrado para estes filtros.' : 'Nenhum evento registrado.' }}</p>
+            <p>{{ filtered ? 'Ajuste o evento ou o período para consultar outras atividades.' : 'Os próximos acessos e alterações aparecerão aqui.' }}</p>
+          </li>
+        </ul>
+      </template>
 
-      <PaginationBar v-if="data" :meta="data.meta" @change="filters.page = $event" />
+      <PaginationBar v-if="data" v-model:per-page="filters.per_page" :meta="data.meta" :disabled="loading || !!error" @change="filters.page = $event" />
     </div>
   </div>
 </template>

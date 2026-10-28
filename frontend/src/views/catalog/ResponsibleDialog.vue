@@ -1,0 +1,106 @@
+<script setup lang="ts">
+import { computed, reactive, ref } from 'vue'
+import BaseDialog from '@/components/ui/BaseDialog.vue'
+import FormField from '@/components/ui/FormField.vue'
+import SelectField from '@/components/ui/SelectField.vue'
+import InlineAlert from '@/components/ui/InlineAlert.vue'
+import { useApiQuery } from '@/composables/useApiQuery'
+import { api, toApiError, type ApiError } from '@/lib/http'
+import type { TechnicalResponsible } from '@/types/api'
+
+const props = defineProps<{ item: TechnicalResponsible | null }>()
+const emit = defineEmits<{ close: []; saved: [item: TechnicalResponsible] }>()
+
+const form = reactive({
+  user_id: props.item?.user?.id ?? '',
+  name: props.item?.name ?? '',
+  cpf: props.item?.cpf ?? '',
+  council: props.item?.council ?? 'CREA',
+  registration: props.item?.registration ?? '',
+  state: props.item?.state ?? '',
+  email: props.item?.email ?? '',
+  phone: props.item?.phone ?? '',
+  registration_status: props.item?.registration_status ?? 'nao_verificado',
+  active: props.item?.active ?? true,
+})
+const submitting = ref(false)
+const error = ref<ApiError | null>(null)
+const { data: users, error: usersError, loading: usersLoading } = useApiQuery(
+  () => 1,
+  () => api<{ data: Array<{ id: string; name: string; email: string }> }>('/technical-responsibles/users'),
+)
+const userOptions = computed(() => {
+  const list = new Map((users.value?.data ?? []).map(user => [user.id, user]))
+  if (props.item?.user && !list.has(props.item.user.id)) list.set(props.item.user.id, props.item.user)
+  return [...list.values()].map(user => ({ value: user.id, label: `${user.name} · ${user.email}` }))
+})
+
+async function submit() {
+  submitting.value = true
+  error.value = null
+  const body = { ...form, user_id: form.user_id || null, state: form.state.toUpperCase() }
+  try {
+    const result = props.item
+      ? await api<{ data: TechnicalResponsible }>(`/technical-responsibles/${props.item.id}`, { method: 'PUT', body })
+      : await api<{ data: TechnicalResponsible }>('/technical-responsibles', { method: 'POST', body })
+    emit('saved', result.data)
+  } catch (e) {
+    error.value = toApiError(e)
+  } finally {
+    submitting.value = false
+  }
+}
+</script>
+
+<template>
+  <BaseDialog
+    :title="item ? 'Editar responsável técnico' : 'Novo responsável técnico'"
+    :submitting="submitting"
+    :error="error"
+    @close="emit('close')"
+    @submit="submit"
+  >
+    <FormField v-model="form.name" label="Nome" required :error="error?.firstError('name')" />
+    <InlineAlert v-if="usersError" :correlation-id="usersError.correlationId">{{ usersError.message }}</InlineAlert>
+    <SelectField
+      v-model="form.user_id"
+      label="Usuário do sistema"
+      :options="userOptions"
+      placeholder="Sem usuário vinculado"
+      :disabled="usersLoading || Boolean(usersError)"
+      :error="error?.firstError('user_id')"
+      hint="Selecione a conta que o RT usa para entrar no sistema. Esse vínculo é necessário para atribuir solicitações."
+    />
+    <FormField v-model="form.cpf" label="CPF" hint="Obrigatório para validar o dossiê de homologação." :error="error?.firstError('cpf')" />
+    <div class="grid gap-4 sm:grid-cols-[7rem_1fr_5rem]">
+      <SelectField
+        v-model="form.council"
+        label="Conselho"
+        :options="[
+          { value: 'CREA', label: 'CREA' },
+          { value: 'CFT', label: 'CFT' },
+        ]"
+      />
+      <FormField v-model="form.registration" label="Registro" required :error="error?.firstError('registration')" />
+      <FormField v-model="form.state" label="UF" required :error="error?.firstError('state')" />
+    </div>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <FormField v-model="form.email" label="E-mail" type="email" :error="error?.firstError('email')" />
+      <FormField v-model="form.phone" label="Telefone" type="tel" :error="error?.firstError('phone')" />
+    </div>
+    <SelectField
+      v-model="form.registration_status"
+      label="Situação do registro"
+      :options="[
+        { value: 'nao_verificado', label: 'Não verificado' },
+        { value: 'regular', label: 'Regular' },
+        { value: 'irregular', label: 'Irregular' },
+      ]"
+      :error="error?.firstError('registration_status')"
+    />
+    <label v-if="item" class="flex items-center gap-2 text-sm">
+      <input v-model="form.active" type="checkbox" class="size-4 accent-primary" />
+      Ativo
+    </label>
+  </BaseDialog>
+</template>

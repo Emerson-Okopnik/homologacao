@@ -4,8 +4,10 @@ import App from './App.vue'
 import { router } from './router'
 import { onUnauthorized } from './lib/http'
 import { useAuthStore } from './stores/auth'
+import { initializeTheme } from './lib/theme'
 import './assets/main.css'
 
+initializeTheme()
 const app = createApp(App)
 const pinia = createPinia()
 

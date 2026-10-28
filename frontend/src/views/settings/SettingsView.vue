@@ -1,0 +1,73 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import WorkflowConfigurationPanel from './WorkflowConfigurationPanel.vue'
+import { RouterLink } from 'vue-router'
+import { ArrowRight, FileCheck2, PlugZap } from '@lucide/vue'
+import InlineAlert from '@/components/ui/InlineAlert.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import { useApiQuery } from '@/composables/useApiQuery'
+import { api } from '@/lib/http'
+import type { Distributor } from '@/types/api'
+
+const revision = ref(0)
+const { data, error, loading } = useApiQuery(
+  () => revision.value,
+  async () => {
+    const [documentTypes, distributors] = await Promise.all([
+      api<{ data: Array<{ value: string; label: string }> }>('/document-types'),
+      api<{ data: Distributor[] }>('/distributors'),
+    ])
+    return { documentTypes: documentTypes.data, distributors: distributors.data }
+  },
+)
+
+const integrated = computed(() => (data.value?.distributors ?? []).filter((d) => ['api', 'automation'].includes(d.integration_mode)).length)
+</script>
+
+<template>
+  <div class="mx-auto w-full max-w-[1240px]">
+    <PageHeader title="Configurações" description="Visão geral do fluxo de homologação, documentos exigidos e integrações com distribuidoras." />
+
+    <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
+    <p v-else-if="loading && !data" class="text-sm text-muted">Carregando configurações…</p>
+
+    <div v-else-if="data" class="flex flex-col gap-6">
+      <WorkflowConfigurationPanel :distributors="data.distributors" :document-types="data.documentTypes" @saved="revision++" />
+
+      <div class="grid gap-6 md:grid-cols-2">
+        <section class="vg-panel p-6" aria-labelledby="cfg-docs">
+          <div class="mb-4 flex items-center gap-2">
+            <FileCheck2 class="size-5 text-primary" aria-hidden="true" />
+            <h2 id="cfg-docs" class="font-semibold">Tipos de documento</h2>
+          </div>
+          <ul class="flex flex-col gap-2 text-sm">
+            <li v-for="doc in data.documentTypes" :key="doc.value" class="flex items-center justify-between gap-2 rounded-lg bg-canvas px-3 py-2">
+              <span>{{ doc.label }}</span>
+              <code class="text-xs text-muted">{{ doc.value }}</code>
+            </li>
+          </ul>
+        </section>
+
+        <section class="flex flex-col vg-panel p-6" aria-labelledby="cfg-int">
+          <div class="mb-4 flex items-center gap-2">
+            <PlugZap class="size-5 text-primary" aria-hidden="true" />
+            <h2 id="cfg-int" class="font-semibold">Integrações com distribuidoras</h2>
+          </div>
+          <p class="text-sm text-muted">
+            {{ integrated }} de {{ data.distributors.length }} distribuidoras com canal API ou automação selecionado.
+          </p>
+          <ul class="mt-4 flex flex-col gap-2 text-sm">
+            <li v-for="d in data.distributors.slice(0, 6)" :key="d.id" class="flex items-center justify-between gap-2">
+              <span>{{ d.name }} <span class="text-muted">({{ d.state }})</span></span>
+              <span class="text-xs text-muted">{{ d.integration_mode_label }}</span>
+            </li>
+          </ul>
+          <RouterLink to="/cadastros" class="mt-auto inline-flex items-center gap-1.5 pt-4 text-sm font-medium text-primary hover:underline">
+            Gerenciar distribuidoras
+            <ArrowRight class="size-4" aria-hidden="true" />
+          </RouterLink>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>

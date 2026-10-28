@@ -15,6 +15,15 @@ beforeEach(() => {
 })
 
 describe('auth store', () => {
+  it('identifica portal.access como acesso Cliente mesmo antes de vincular o titular', () => {
+    const auth = useAuthStore()
+    auth.setSession({ ...me, permissions: ['portal.access'], client: null })
+    expect(auth.isClient).toBe(true)
+    expect(auth.can('projects.view')).toBe(false)
+    auth.setSession({ ...me, permissions: ['projects.view'], client: null })
+    expect(auth.isClient).toBe(false)
+  })
+
   it('carrega a sessão e expõe permissões', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: me }), { status: 200 }))
     const auth = useAuthStore()

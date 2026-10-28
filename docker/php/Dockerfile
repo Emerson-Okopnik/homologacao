@@ -1,13 +1,14 @@
-FROM php:8.4-fpm-alpine
+FROM php:8.5.12-fpm-alpine
 
 ARG UID=1000
 ARG GID=1000
 
+# OPcache já integra o PHP 8.5; não compilar como extensão compartilhada.
 RUN apk add --no-cache \
         bash git unzip icu-libs libzip libpq postgresql-client \
     && apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS icu-dev libzip-dev postgresql-dev linux-headers \
-    && docker-php-ext-install -j"$(nproc)" pdo_pgsql pgsql intl zip bcmath opcache pcntl \
+    && docker-php-ext-install -j"$(nproc)" pdo_pgsql pgsql intl zip bcmath pcntl \
     && pecl install redis pcov \
     && docker-php-ext-enable redis pcov \
     && apk del .build-deps
@@ -15,7 +16,9 @@ RUN apk add --no-cache \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY php.ini /usr/local/etc/php/conf.d/zz-homologa.ini
 
-RUN addgroup -g "${GID}" app && adduser -D -u "${UID}" -G app app
+RUN addgroup -g "${GID}" app && adduser -D -u "${UID}" -G app app \
+    && mkdir -p /var/www/backend/vendor /tmp/composer-cache \
+    && chown app:app /var/www/backend/vendor /tmp/composer-cache
 
 USER app
 WORKDIR /var/www/backend

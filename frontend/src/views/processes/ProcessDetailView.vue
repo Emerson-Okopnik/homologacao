@@ -1,0 +1,419 @@
+<script setup lang="ts">
+import { computed, ref, shallowRef, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import { Activity, AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, CircleDashed, Download, Pencil, Upload, XCircle, Zap } from '@lucide/vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import InlineAlert from '@/components/ui/InlineAlert.vue'
+import StatusBadge from '@/components/ui/StatusBadge.vue'
+import InteractionDialog from './InteractionDialog.vue'
+import PendencyDialog from './PendencyDialog.vue'
+import ReviewDialog from './ReviewDialog.vue'
+import TransitionDialog from './TransitionDialog.vue'
+import ProcessTrackingPanel from './ProcessTrackingPanel.vue'
+import ProcessPhasePanel from './ProcessPhasePanel.vue'
+import DocumentUploadDialog from '@/views/documents/DocumentUploadDialog.vue'
+import ChecklistReviewDialog from './ChecklistReviewDialog.vue'
+import { useApiQuery } from '@/composables/useApiQuery'
+import { api, buildUrl, type ApiError } from '@/lib/http'
+import { formatDate, formatDateTime, formatDocument, formatNumber, statusTone } from '@/lib/format'
+import { useAuthStore } from '@/stores/auth'
+import type { HomologationProcess, Pendency, ProcessDocument } from '@/types/api'
+import { isProcessClosed, processDeadline, processGuidance, type ProcessSection } from './processPresentation'
+
+const route = useRoute()
+const auth = useAuthStore()
+const version = ref(0)
+const source = computed(() => ({ id: String(route.params.id), version: version.value }))
+const { data: process, error, loading } = useApiQuery(source, async (s) => (await api<{ data: HomologationProcess }>(`/processes/${s.id}`)).data)
+
+const transition = shallowRef<{ initial?: string } | null>(null)
+const pendencyDialog = shallowRef<{ resolving: Pendency | null } | null>(null)
+const interactionOpen = ref(false)
+const reviewing = shallowRef<ProcessDocument | null>(null)
+const uploadError = ref<ApiError | null>(null)
+const uploadingType = ref<string | null>(null)
+const uploading = shallowRef<{ initialType: string; initialFile: File } | null>(null)
+const checklistReview = ref<string | null>(null)
+const section = ref<ProcessSection>('summary')
+const sections: Array<{ value: ProcessSection; label: string }> = [
+  { value: 'summary', label: 'Resumo' },
+  { value: 'technical', label: 'Documentos e dados técnicos' },
+  { value: 'distributor', label: 'Distribuidora' },
+  { value: 'history', label: 'Histórico' },
+]
+watch(() => route.params.id, () => { section.value = 'summary' })
+const guidance = computed(() => process.value ? processGuidance(process.value) : null)
+const deadline = computed(() => process.value ? processDeadline(process.value) : null)
+const distributor = computed(() => process.value?.distributor ?? process.value?.project?.consumer_unit?.distributor)
+
+const canManage = computed(() => auth.can('homologations.manage'))
+const checklistDone = computed(() => (process.value?.checklist ?? []).filter((c) => c.required && (c.status ?? c.document?.review_status) === 'aprovado').length)
+const checklistRequired = computed(() => (process.value?.checklist ?? []).filter((c) => c.required).length)
+const openPendencies = computed(() => (process.value?.pendencies ?? []).filter((p) => p.status === 'aberta'))
+const visiblePendencies = computed(() => section.value === 'history'
+  ? (process.value?.pendencies ?? []).filter((p) => p.status !== 'aberta')
+  : openPendencies.value)
+const manualTransitions = computed(() => (process.value?.allowed_transitions ?? []).filter((t) => !['enviado', 'vistoria_solicitada'].includes(t.stage_type ?? t.value)))
+const preparationIssues = computed(() => ['rascunho', 'em_preparacao', 'pronto_para_envio', 'pendencia_distribuidora', 'reprovado'].includes(process.value?.status ?? '') ? process.value?.readiness_issues ?? [] : [])
+const pendingRequirements = computed(() => preparationIssues.value.length || process.value?.phase_checklist?.blocking.length || 0)
+const workflowPhases = [
+  { value: 'PREPARATION', label: 'Preparação' },
+  { value: 'EXTERNAL_ANALYSIS', label: 'Análise da distribuidora' },
+  { value: 'CORRECTION', label: 'Correção' },
+  { value: 'EXECUTION', label: 'Execução' },
+  { value: 'INSPECTION', label: 'Vistoria' },
+  { value: 'CONNECTION', label: 'Conexão' },
+]
+const activePhase = computed(() => workflowPhases.findIndex(phase => phase.value === process.value?.stage))
+const initials = (name?: string) => name?.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]).join('') || '—'
+
+function reload() {
+  transition.value = null
+  pendencyDialog.value = null
+  interactionOpen.value = false
+  reviewing.value = null
+  uploading.value = null
+  checklistReview.value = null
+  version.value++
+}
+
+function onFile(type: string | null, event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !type) return
+  uploading.value = { initialType: type, initialFile: file }
+  input.value = ''
+}
+
+const statusLabels: Record<string, string> = {
+  rascunho: 'Rascunho',
+  em_preparacao: 'Em preparação',
+  pronto_para_envio: 'Pronto para envio',
+  enviado: 'Enviado',
+  em_analise: 'Em análise',
+  pendencia_distribuidora: 'Pendência da distribuidora',
+  aprovado: 'Aprovado',
+  vistoria_solicitada: 'Vistoria solicitada',
+  conectado: 'Conectado',
+  reprovado: 'Reprovado',
+  cancelado: 'Cancelado',
+}
+
+const interactionLabels: Record<string, string> = {
+  nota: 'Nota interna',
+  envio: 'Envio à distribuidora',
+  resposta_distribuidora: 'Resposta da distribuidora',
+  contato: 'Contato com cliente',
+}
+</script>
+
+<template>
+  <div class="mx-auto max-w-6xl">
+    <RouterLink to="/processos" class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+      <ArrowLeft class="size-4" aria-hidden="true" />
+      Processos
+    </RouterLink>
+
+    <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
+    <p v-else-if="!process && loading" class="py-12 text-center text-muted" role="status">Carregando processo…</p>
+
+    <template v-else-if="process">
+      <header class="mb-7 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-3">
+            <h1 class="text-2xl font-semibold tracking-tight text-ink md:text-[1.75rem]">{{ process.project?.client?.name ?? process.code }}</h1>
+            <span class="inline-flex rounded-md bg-blue-soft px-3 py-1.5 text-[11px] font-medium text-corporate-blue">{{ process.stage_label }}</span>
+            <StatusBadge :tone="statusTone(process.status)">{{ process.status_label }}</StatusBadge>
+          </div>
+          <p class="mt-3 text-xs leading-6 text-muted">{{ process.code }} · UC {{ process.project?.consumer_unit?.number ?? '—' }} · {{ distributor?.name ?? 'Distribuidora não informada' }}</p>
+          <p v-if="deadline" class="mt-1 text-xs" :class="deadline.overdue ? 'font-medium text-danger' : 'text-muted'">{{ deadline.label }}: {{ formatDate(deadline.date) }}<span v-if="deadline.overdue"> · vencido</span></p>
+        </div>
+        <BaseButton v-if="canManage && manualTransitions.length" class="shrink-0" @click="transition = {}">Alterar etapa do processo</BaseButton>
+      </header>
+
+      <nav class="mb-6 overflow-x-auto rounded-xl border border-line bg-surface px-5 py-6" aria-label="Fases da homologação">
+        <ol class="flex min-w-[620px]">
+          <li v-for="(phase, index) in workflowPhases" :key="phase.value" class="relative flex-1 last:flex-none last:pr-2" :class="index === workflowPhases.length - 1 ? 'min-w-20' : 'pr-3'" :aria-current="index === activePhase ? 'step' : undefined">
+            <span v-if="index < workflowPhases.length - 1" class="absolute top-3.5 right-0 left-8 h-px" :class="index < activePhase ? 'bg-primary' : 'bg-line'" aria-hidden="true" />
+            <span class="relative inline-flex size-7 items-center justify-center rounded-full border text-[10px] font-medium" :class="index <= activePhase ? 'border-primary bg-primary text-on-primary' : 'border-line bg-surface text-muted'">
+              <Check v-if="index < activePhase || process.status === 'conectado'" class="size-3.5" aria-hidden="true" /><template v-else>{{ index + 1 }}</template>
+            </span>
+            <p class="mt-3 max-w-36 text-[10px] leading-4" :class="index === activePhase ? 'font-semibold text-ink' : 'text-muted'">{{ phase.label }}</p>
+          </li>
+        </ol>
+      </nav>
+
+      <nav class="mb-6 flex gap-5 overflow-x-auto border-b border-line" aria-label="Seções do processo">
+        <button v-for="item in sections" :key="item.value" type="button"
+          class="min-h-12 shrink-0 border-b-[3px] px-0.5 text-xs font-medium transition-colors"
+          :class="section === item.value ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-ink'"
+          :aria-pressed="section === item.value" aria-controls="process-content" @click="section = item.value">
+          {{ item.label }}
+        </button>
+      </nav>
+
+      <div id="process-content">
+        <div v-if="section === 'summary' && guidance" class="mb-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <section class="overflow-hidden rounded-xl bg-[#0A1F5C] p-5 text-white md:p-6" aria-labelledby="sec-next">
+            <div class="flex items-center gap-3"><Activity class="size-5 text-[#8DE0C4]" aria-hidden="true" /><p class="text-[10px] font-medium uppercase tracking-[0.14em] text-[#8DE0C4]">{{ isProcessClosed(process) ? 'Situação do processo' : 'Próximo passo' }}</p></div>
+            <h2 id="sec-next" class="mt-5 text-xl font-medium leading-8 tracking-tight">{{ guidance.title }}</h2>
+            <p class="mt-3 max-w-2xl text-xs leading-6 text-white/80">{{ guidance.description }}</p>
+            <p v-if="!isProcessClosed(process)" class="mt-4 text-xs leading-6 text-white/80">Responsável pela próxima ação: <strong class="font-medium text-white">{{ guidance.responsibility }}</strong></p>
+            <div class="mt-5 flex flex-wrap items-center justify-between gap-4">
+              <span v-if="pendingRequirements && !isProcessClosed(process)" class="rounded-md bg-white/10 px-3 py-2 text-[11px] text-white/85">{{ pendingRequirements }} {{ pendingRequirements === 1 ? 'requisito a conferir' : 'requisitos a conferir' }} nesta fase</span>
+              <BaseButton class="ml-auto" variant="secondary" @click="section = guidance.section"><ArrowRight class="size-4" aria-hidden="true" />{{ guidance.action }}</BaseButton>
+            </div>
+          </section>
+          <section class="rounded-xl border border-line bg-surface p-5 md:p-6" aria-labelledby="sec-info">
+            <h2 id="sec-info" class="text-sm font-semibold">Informações do processo</h2>
+            <dl class="mt-5 divide-y divide-line text-xs">
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Código</dt><dd class="break-all text-right font-medium">{{ process.code }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Protocolo</dt><dd class="break-all text-right font-medium">{{ process.protocol_number ?? 'Não registrado' }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Distribuidora</dt><dd class="text-right font-medium">{{ distributor?.name ?? '—' }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Módulos</dt><dd class="text-right font-medium">{{ formatNumber(process.project?.installed_power_kwp, 'kWp') }}</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-muted">Modalidade</dt><dd class="text-right font-medium">{{ process.project?.modality_label ?? '—' }}</dd></div>
+              <div class="flex justify-between gap-4 pt-3"><dt class="text-muted">Aberto em</dt><dd class="text-right font-medium">{{ formatDate(process.created_at) }}</dd></div>
+            </dl>
+          </section>
+        </div>
+
+        <details v-if="section === 'technical' && preparationIssues.length" class="mb-6 rounded-xl border border-line bg-surface p-4">
+          <summary class="cursor-pointer text-sm font-semibold">O que falta para o envio · {{ preparationIssues.length }} {{ preparationIssues.length === 1 ? 'requisito' : 'requisitos' }}</summary>
+          <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
+            <li v-for="issue in preparationIssues" :key="issue">{{ issue }}</li>
+          </ul>
+        </details>
+
+        <div v-if="section !== 'distributor'" class="grid items-start gap-6" :class="section === 'technical' || section === 'summary' ? 'lg:grid-cols-[minmax(0,1fr)_22rem]' : ''">
+          <div class="flex min-w-0 flex-col gap-6">
+            <section v-if="section === 'technical'" class="rounded-xl border border-line bg-surface" aria-labelledby="sec-docs">
+              <header class="flex items-center justify-between border-b border-line px-6 py-4">
+                <h2 id="sec-docs" class="font-semibold">Checklist de documentos</h2>
+                <span class="text-sm text-muted tabular-nums">{{ checklistDone }}/{{ checklistRequired }} obrigatórios aprovados</span>
+              </header>
+              <div v-if="uploadError" class="px-6 pt-4">
+                <InlineAlert :correlation-id="uploadError.correlationId">{{ uploadError.firstError('file') ?? uploadError.message }}</InlineAlert>
+              </div>
+              <ul class="divide-y divide-line">
+                <li v-for="item in process.checklist ?? []" :key="item.id ?? item.type ?? item.label" class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center">
+                  <component
+                    :is="(item.status ?? item.document?.review_status) === 'aprovado' ? CheckCircle2 : (item.status ?? item.document?.review_status) === 'reprovado' ? XCircle : CircleDashed"
+                    class="size-5 shrink-0"
+                    :class="(item.status ?? item.document?.review_status) === 'aprovado' ? 'text-success' : (item.status ?? item.document?.review_status) === 'reprovado' ? 'text-danger' : 'text-muted'"
+                    aria-hidden="true"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium">
+                      {{ item.label }}
+                      <span v-if="!item.required" class="text-xs font-normal text-muted">(opcional)</span>
+                    </p>
+                    <p v-if="item.document" class="truncate text-xs text-muted">
+                      v{{ item.document.version }} · {{ item.document.original_name }} · {{ formatDateTime(item.document.created_at) }}
+                    </p>
+                    <p v-if="item.document?.review_status === 'reprovado' && item.document.review_notes" class="mt-1 text-xs text-danger">
+                      {{ item.document.review_notes }}
+                    </p>
+                    <p v-else-if="!item.document" class="text-xs text-muted">{{ item.type ? 'Aguardando envio' : item.status === 'aprovado' ? 'Requisito validado' : 'Aguardando validação do requisito' }}</p>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-1">
+                    <StatusBadge v-if="item.document" :tone="statusTone(item.document.review_status)" class="capitalize">
+                      {{ item.document.review_status }}
+                    </StatusBadge>
+                    <a
+                      v-if="item.document"
+                      :href="buildUrl(`/documents/${item.document.id}/download`)"
+                      target="_blank"
+                      rel="noopener"
+                      class="rounded-lg p-2 text-muted hover:bg-canvas hover:text-ink"
+                    >
+                      <Download class="size-4" aria-hidden="true" />
+                      <span class="sr-only">Baixar {{ item.label }}</span>
+                    </a>
+                    <BaseButton
+                      v-if="item.document?.review_status === 'pendente' && auth.can('documents.manage')"
+                      variant="ghost"
+                      @click="reviewing = item.document"
+                    >
+                      Revisar
+                    </BaseButton>
+                    <label
+                      v-if="item.type && process.editable && auth.can('documents.manage')"
+                      class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-medium hover:bg-canvas focus-within:ring-2 focus-within:ring-primary"
+                    >
+                      <Upload class="size-4" aria-hidden="true" />
+                      {{ uploadingType === item.type ? 'Enviando…' : item.document ? 'Nova versão' : 'Enviar' }}
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        class="sr-only"
+                        :disabled="uploadingType !== null"
+                        :aria-label="`Enviar ${item.label}`"
+                        @change="onFile(item.type, $event)"
+                      />
+                    </label>
+                    <BaseButton v-if="!item.type && item.id && canManage" variant="ghost" @click="checklistReview = item.id">Validar requisito</BaseButton>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+            <section v-if="section === 'summary' || (section === 'history' && visiblePendencies.length)" class="rounded-xl border border-line bg-surface" aria-labelledby="sec-pend">
+              <header class="flex items-center justify-between border-b border-line px-6 py-4">
+                <h2 id="sec-pend" class="font-semibold">
+                  {{ section === 'history' ? 'Pendências resolvidas' : 'Pendências em aberto' }}
+                  <span v-if="section === 'summary' && openPendencies.length" class="ml-1 text-sm font-normal text-warning">({{ openPendencies.length }})</span>
+                </h2>
+                <BaseButton v-if="canManage && section === 'summary' && !isProcessClosed(process)" variant="secondary" @click="pendencyDialog = { resolving: null }">Registrar pendência</BaseButton>
+              </header>
+              <p v-if="!visiblePendencies.length" class="px-6 py-6 text-sm text-muted">Nenhuma pendência em aberto. Os documentos e requisitos da fase podem ser consultados na seção técnica.</p>
+              <ul v-else class="divide-y divide-line">
+                <li v-for="p in visiblePendencies" :key="p.id" class="flex gap-3 px-6 py-4">
+                  <AlertTriangle v-if="p.status === 'aberta'" class="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+                  <CheckCircle2 v-else class="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium">{{ p.title }}</p>
+                    <p class="text-xs text-muted">
+                      {{ p.origin === 'distribuidora' ? 'Distribuidora' : 'Interna' }} · {{ formatDate(p.created_at) }}
+                      <template v-if="p.due_date"> · prazo {{ formatDate(p.due_date) }}</template>
+                    </p>
+                    <p v-if="p.description" class="mt-1 whitespace-pre-line text-sm text-muted">{{ p.description }}</p>
+                    <p v-if="p.resolution" class="mt-2 rounded-lg bg-success-soft px-3 py-2 text-sm text-success">
+                      {{ p.resolution }} — {{ p.resolved_by }}
+                    </p>
+                  </div>
+                  <BaseButton v-if="canManage && p.status === 'aberta' && !p.external" variant="ghost" @click="pendencyDialog = { resolving: p }">Resolver</BaseButton>
+                </li>
+              </ul>
+            </section>
+
+            <section v-if="section === 'history'" class="rounded-xl border border-line bg-surface" aria-labelledby="sec-int">
+              <header class="flex items-center justify-between border-b border-line px-6 py-4">
+                <h2 id="sec-int" class="font-semibold">Interações</h2>
+                <BaseButton v-if="canManage" variant="secondary" @click="interactionOpen = true">Registrar</BaseButton>
+              </header>
+              <p v-if="!process.interactions?.length" class="px-6 py-8 text-center text-sm text-muted">Nenhuma interação registrada.</p>
+              <ul v-else class="divide-y divide-line">
+                <li v-for="i in process.interactions" :key="i.id" class="px-6 py-4">
+                  <p class="text-xs text-muted">
+                    <span class="font-semibold text-ink">{{ interactionLabels[i.type] ?? i.type }}</span>
+                    · {{ i.channel }} · {{ i.user ?? 'Sistema' }} · {{ formatDateTime(i.occurred_at) }}
+                  </p>
+                  <p class="mt-1 whitespace-pre-line text-sm">{{ i.description }}</p>
+                </li>
+              </ul>
+            </section>
+          </div>
+
+          <aside v-if="section === 'technical' || section === 'history' || section === 'summary'" class="flex flex-col gap-6">
+            <section v-if="section === 'summary'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-team">
+              <h2 id="sec-team" class="text-sm font-semibold">Responsáveis</h2>
+              <div class="mt-5 flex items-start gap-3">
+                <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary">{{ initials(process.project?.technical_responsible?.name) }}</span>
+                <div><p class="text-xs font-medium">{{ process.project?.technical_responsible?.name ?? 'Ainda não definido' }}</p><p class="mt-1 text-[11px] leading-5 text-muted">Responsável técnico do projeto</p></div>
+              </div>
+              <div class="mt-5 flex items-start gap-3 border-t border-line pt-5">
+                <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-soft text-xs font-semibold text-corporate-blue">{{ initials(process.assignee?.name) }}</span>
+                <div><p class="text-xs font-medium">{{ process.assignee?.name ?? 'Ainda não atribuído' }}</p><p class="mt-1 text-[11px] leading-5 text-muted">Responsável pela homologação</p></div>
+              </div>
+            </section>
+            <section v-if="section === 'summary'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-doc-progress">
+              <div class="flex items-center gap-3"><Zap class="size-5 text-primary" aria-hidden="true" /><h2 id="sec-doc-progress" class="text-sm font-semibold">Documentos obrigatórios</h2></div>
+              <p class="mt-4 text-xs text-muted">{{ checklistDone }} de {{ checklistRequired }} aprovados</p>
+              <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-canvas" aria-hidden="true"><div class="h-full rounded-full bg-primary" :style="{ width: checklistRequired ? `${checklistDone / checklistRequired * 100}%` : '0%' }" /></div>
+              <BaseButton class="mt-5 w-full" variant="secondary" @click="section = 'technical'">Ver documentos e requisitos</BaseButton>
+            </section>
+            <section v-if="section === 'technical'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-proj">
+              <RouterLink v-if="process.project" :to="`/projetos/${process.project.id}/dados-tecnicos`" class="mb-3 inline-block text-sm font-medium text-primary">Dados técnicos, ART/TRT e versões</RouterLink>
+              <div class="flex items-center justify-between">
+                <h2 id="sec-proj" class="font-semibold">Projeto</h2>
+                <RouterLink
+                  v-if="process.project && auth.can('projects.manage') && process.editable"
+                  :to="`/projetos/${process.project.id}`"
+                  class="rounded-lg p-1.5 text-muted hover:bg-canvas hover:text-ink"
+                >
+                  <Pencil class="size-4" aria-hidden="true" />
+                  <span class="sr-only">Editar projeto</span>
+                </RouterLink>
+              </div>
+              <dl v-if="process.project" class="mt-4 flex flex-col gap-3 text-sm">
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Código</dt>
+                  <dd class="font-mono">{{ process.project.code }}</dd>
+                </div>
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Enquadramento</dt>
+                  <dd class="capitalize">{{ process.project.generation_type }}geração</dd>
+                </div>
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Modalidade</dt>
+                  <dd class="text-right">{{ process.project.modality_label }}</dd>
+                </div>
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Módulos</dt>
+                  <dd class="tabular-nums">{{ formatNumber(process.project.installed_power_kwp, 'kWp') }}</dd>
+                </div>
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Inversores</dt>
+                  <dd class="tabular-nums">{{ formatNumber(process.project.inverter_power_kw, 'kW') }}</dd>
+                </div>
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Bateria</dt>
+                  <dd>{{ process.project.has_battery ? 'Sim' : 'Não' }}</dd>
+                </div>
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Titular</dt>
+                  <dd class="tabular-nums">{{ process.project.client ? formatDocument(process.project.client.document) : '—' }}</dd>
+                </div>
+                <div class="flex justify-between gap-4">
+                  <dt class="text-muted">Resp. técnico</dt>
+                  <dd class="text-right">{{ process.project.technical_responsible?.name ?? '—' }}</dd>
+                </div>
+              </dl>
+              <ul v-if="process.project?.equipment?.length" class="mt-4 flex flex-col gap-1 border-t border-line pt-4 text-xs text-muted">
+                <li v-for="e in process.project.equipment" :key="e.id">{{ e.quantity }}× {{ e.manufacturer }} {{ e.model }}</li>
+              </ul>
+            </section>
+
+            <section v-if="section === 'history'" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-hist">
+              <h2 id="sec-hist" class="font-semibold">Histórico de etapas</h2>
+              <ol class="mt-4 flex flex-col gap-4 border-l border-line pl-4">
+                <li v-for="(h, index) in process.history ?? []" :key="index" class="relative">
+                  <span class="absolute top-1.5 -left-[1.3rem] size-2 rounded-full bg-primary" aria-hidden="true" />
+                  <p class="text-sm font-medium">{{ statusLabels[h.to_status] ?? h.to_status }}</p>
+                  <p class="text-xs text-muted">{{ h.user ?? 'Sistema' }} · {{ formatDateTime(h.created_at) }}</p>
+                  <p v-if="h.reason" class="mt-1 text-xs text-muted">{{ h.reason }}</p>
+                </li>
+              </ol>
+            </section>
+            <section v-if="section === 'history' && process.timeline?.length" class="rounded-xl border border-line bg-surface p-6" aria-labelledby="sec-events">
+              <h2 id="sec-events" class="font-semibold">Registros da execução e conexão</h2>
+              <ul class="mt-4 space-y-4">
+                <li v-for="(event, index) in process.timeline" :key="index" class="text-sm">
+                  <p class="font-medium">{{ event.title }}</p>
+                  <p class="text-xs text-muted">{{ formatDateTime(event.occurred_at) }} · {{ event.user ?? 'Sistema' }}</p>
+                  <p v-if="event.description" class="mt-1 whitespace-pre-line text-sm text-muted">{{ event.description }}</p>
+                </li>
+              </ul>
+            </section>
+          </aside>
+        </div>
+
+        <details v-if="section === 'technical'" class="mt-6 rounded-xl border border-line bg-surface p-5">
+          <summary class="cursor-pointer font-semibold">Regras aplicáveis à fase<span v-if="process.phase_checklist"> · {{ process.phase_checklist.satisfied }}/{{ process.phase_checklist.total }} atendidas</span></summary>
+          <ProcessPhasePanel :process="process" mode="requirements" @saved="reload" />
+        </details>
+        <template v-if="section === 'distributor'">
+          <div id="sec-tracking"><ProcessTrackingPanel :process="process" :revision="version" @saved="reload" /></div>
+          <ProcessPhasePanel :process="process" mode="actions" @saved="reload" />
+        </template>
+      </div>
+
+      <TransitionDialog v-if="transition" :process="process" :initial="transition.initial" @close="transition = null" @saved="reload" />
+      <PendencyDialog v-if="pendencyDialog" :process-id="process.id" :resolving="pendencyDialog.resolving" @close="pendencyDialog = null" @saved="reload" />
+      <InteractionDialog v-if="interactionOpen" :process-id="process.id" @close="interactionOpen = false" @saved="reload" />
+      <ReviewDialog v-if="reviewing" :document="reviewing" @close="reviewing = null" @saved="reload" />
+      <DocumentUploadDialog v-if="uploading" :endpoint="`/processes/${process.id}/documents`" v-bind="uploading" @close="uploading = null" @saved="reload" />
+      <ChecklistReviewDialog v-if="checklistReview" :item-id="checklistReview" @close="checklistReview = null" @saved="reload" />
+    </template>
+  </div>
+</template>

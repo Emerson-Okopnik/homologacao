@@ -35,9 +35,10 @@ class AuthServiceProvider extends ServiceProvider
         }
 
         ResetPassword::createUrlUsing(function (User $user, string $token): string {
-            $query = http_build_query(['token' => $token, 'email' => $user->getEmailForPasswordReset()]);
+            $query = http_build_query(['email' => $user->getEmailForPasswordReset()], '', '&', PHP_QUERY_RFC3986);
+            $encodedToken = rawurlencode($token);
 
-            return rtrim((string) config('homologa.frontend_url'), '/')."/redefinir-senha?{$query}";
+            return rtrim((string) config('homologa.frontend_url'), '/')."/redefinir-senha/{$encodedToken}?{$query}";
         });
     }
 }

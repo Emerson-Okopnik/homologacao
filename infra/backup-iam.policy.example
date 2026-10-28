@@ -1,0 +1,10 @@
+# Examples only: substitute compartment, dynamic group and this VM's OCID.
+# Dynamic group dg-homologa-backup matching rule (one VM only):
+# instance.id = 'ocid1.instance.REPLACE_WITH_INSTANCE_OCID'
+
+Allow dynamic-group dg-homologa-backup to manage objects in compartment app-prod where all {target.bucket.name='bk-homologa-prod', any {request.permission='OBJECT_CREATE', request.permission='OBJECT_READ', request.permission='OBJECT_INSPECT'}}
+
+# The VM cannot overwrite/delete objects. Keep the bucket private, Standard,
+# versioning disabled, and configure a 7-day lifecycle through a separate admin.
+# Object Storage's lifecycle service policy is separate from the VM policy.
+# Use a read-only identity from outside OCI to collect independent encrypted copies.
