@@ -73,6 +73,18 @@ for file in db_password redis_password; do
   chmod 444 "$path"
 done
 
+# A senha SMTP é emitida pelo provedor. Não gerar uma senha aleatória sem validade.
+mail_secret=secrets/mail_password.txt
+if [[ -L "$mail_secret" || ( -e "$mail_secret" && ! -f "$mail_secret" ) ]]; then
+  echo "Arquivo de segredo inválido: $mail_secret" >&2
+  exit 1
+fi
+if [[ ! -e "$mail_secret" ]]; then
+  install -o 0 -g 0 -m 444 /dev/null "$mail_secret"
+fi
+chown 0:0 "$mail_secret"
+chmod 444 "$mail_secret"
+
 install -d -m 750 data
 install -d -o 33 -g 33 -m 750 data/storage \
   data/storage/app/private data/storage/app/public \
@@ -84,4 +96,6 @@ find data/storage -type f -exec chmod 640 {} +
 
 echo 'Configuração preparada sem exibir segredos.'
 echo 'Preencha domínios, SMTP e tags da release em .env.production/.env.app/.env.web.'
+echo 'Preencha secrets/mail_password.txt com a senha SMTP emitida pelo provedor; o arquivo novo fica vazio.'
+echo 'A aplicação recusa iniciar em produção enquanto SMTP e TLS não estiverem configurados.'
 echo 'Para migração, restaure a APP_KEY existente e os documentos antes de liberar tráfego.'

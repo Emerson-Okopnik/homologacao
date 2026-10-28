@@ -15,6 +15,7 @@ O runtime PHP foi atualizado para **8.5.12**, substituindo o exemplo PHP 8.4 do 
 | `.env.web` | Domínio da API e e-mail ACME. |
 | `secrets/db_password.txt` | Senha do papel da aplicação, montada somente no banco e na API/workers. |
 | `secrets/redis_password.txt` | Senha Redis, montada somente nos serviços que a utilizam. |
+| `secrets/mail_password.txt` | Senha SMTP emitida pelo provedor, montada somente na API, worker e scheduler. |
 | `data/storage` | Documentos privados, eventuais arquivos públicos e estado compartilhado Laravel. |
 
 Serviços: `db`, `redis`, `app`, `caddy`, `worker`, `scheduler`. Banco e Redis ficam na rede `data` com `internal: true`; Caddy participa somente da rede `edge`. API e processos de fila/agendamento têm saída para SMTP e integrações. Não há Vite, Mailpit ou MinIO em produção: os documentos atuais usam o disco local privado.
@@ -33,7 +34,7 @@ sudo bash scripts/prepare-production.sh
 sudo nano .env.production .env.app .env.web
 ```
 
-O script cria somente os arquivos ausentes e preenche chaves/senhas vazias com valores aleatórios, sem exibi-los. Não rotaciona valores já preenchidos. O diretório `secrets/` fica root/0700; seus arquivos ficam 0444 para leitura dos mounts individuais por usuários diferentes nos contêineres. Os `.env` ficam 0600 e o storage pertence a UID/GID 33.
+O script cria somente os arquivos ausentes e preenche chaves/senhas de banco e Redis vazias com valores aleatórios, sem exibi-los. A senha SMTP deve ser emitida pelo provedor: `secrets/mail_password.txt` é criado vazio para preenchimento manual. Não rotaciona valores já preenchidos. O diretório `secrets/` fica root/0700; seus arquivos ficam 0444 para leitura dos mounts individuais por usuários diferentes nos contêineres. Os `.env` ficam 0600 e o storage pertence a UID/GID 33.
 
 Preencha:
 
@@ -41,7 +42,7 @@ Preencha:
 - `APP_URL=https://api.SEU_DOMINIO` e `FRONTEND_URL=https://app.SEU_DOMINIO`.
 - `SESSION_DOMAIN=.SEU_DOMINIO` e `SANCTUM_STATEFUL_DOMAINS=app.SEU_DOMINIO`.
 - `API_DOMAIN=api.SEU_DOMINIO` e `ACME_EMAIL` em `.env.web`.
-- SMTP autenticado real em `.env.app` e credenciais das integrações utilizadas.
+- Endpoint, usuário e remetente SMTP em `.env.app`; senha SMTP em `secrets/mail_password.txt`. Consulte o procedimento de e-mails abaixo antes de iniciar a aplicação.
 
 Em uma migração, **preserve a APP_KEY de produção** e os demais segredos existentes; a chave nova gerada é apropriada somente para instalação nova. Importe banco/documentos em uma janela de manutenção e ajuste donos/permissões. Os uploads existentes do ambiente local ficam em `backend/storage/app/private`; precisam ser copiados para `data/storage/app/private`, preservando a estrutura `tenants/...` e os caminhos registrados no banco. Não aponte o volume PostgreSQL antigo para uma imagem diferente por tentativa: use dump/restore aprovado para migrar entre hosts/imagens.
 
@@ -93,6 +94,71 @@ Somente `storage/app/public` é acessível por `/storage/`; documentos em `app/p
 Use instalação com `pnpm install --frozen-lockfile` quando o pipeline for manual. Toda variável `VITE_*` é pública e exige novo build quando muda. Cadastre o domínio próprio na Pages e configure o DNS; teste acesso direto a uma rota profunda da SPA. Previews devem usar homologação com um domínio compatível com a estratégia de cookies.
 
 Valide login/logout, expiração/CSRF, recuperação de senha com SMTP real, upload/download, duas contas de tenants diferentes e operações principais no navegador usando os domínios finais. CORS permite somente `FRONTEND_URL` em produção. Não habilite proxy adicional da API sem ajustar TLS, IP real e proxies confiáveis.
+
+## E-mails transacionais e recuperação de senha
+
+O fluxo usa os serviços já existentes: Vue na Pages → API Laravel → fila Redis `mail` → worker → SMTP autenticado → caixa do destinatário. O envio acontece fora da requisição HTTP, com novas tentativas quando há falha temporária. A resposta de “Esqueci minha senha” permanece genérica para não informar se um e-mail está cadastrado. O link abre `FRONTEND_URL/redefinir-senha/...`; a SPA envia a nova senha à API HTTPS. A validade é definida no broker Laravel, e o token deixa de valer depois do uso.
+
+A API responde `202` e enfileira o pedido antes de consultar a conta. O primeiro job verifica se usuário e empresa estão ativos, aplica o intervalo de 60 segundos entre gerações por e-mail e cria o token com validade de 60 minutos. O segundo job envia a notificação e reutiliza esse token nas tentativas seguintes. Antes de cada envio, descarta links expirados, usados ou substituídos e contas desativadas. O banco guarda somente o hash do token; os jobs que carregam destinatário ou token são criptografados com `APP_KEY`, inclusive no payload preservado em `failed_jobs`. Preserve essa chave ao recriar os contêineres.
+
+A referência de produção é **OCI Email Delivery**, sem servidor SMTP próprio na VM e sem SMTP no frontend. O transporte continua compatível com outro provedor autenticado. O exemplo usa `smtps` na porta `465`, com TLS desde o início, conforme a [configuração SMTP atual da Oracle](https://docs.oracle.com/en-us/iaas/Content/Email/Reference/gettingstarted_topic-Configure_the_SMTP_connection.htm). Use o endpoint e a porta apresentados no Console da região escolhida. Para um provedor que documente STARTTLS em `587`, configure `MAIL_SCHEME=smtp`, `MAIL_PORT=587` e mantenha `MAIL_REQUIRE_TLS=true`.
+
+### Habilitar o remetente na OCI
+
+1. No serviço Email Delivery, escolha a região e copie o endpoint SMTP mostrado em **Configuration**. O endereço de exemplo em `.env.app.example` deve ser conferido no Console.
+2. Crie um usuário técnico para envio e as permissões necessárias no compartment de e-mail. Gere as **credenciais SMTP** desse usuário; elas são diferentes da senha do Console e da chave de API. Guarde a senha ao gerar: a Oracle não a mostra novamente. Consulte [credenciais SMTP](https://docs.oracle.com/en-us/iaas/Content/Identity/access/working-with-smtp-credentials.htm) e [configuração do serviço](https://docs.oracle.com/en-us/iaas/Content/Email/Reference/gettingstarted.htm).
+3. Configure o domínio de envio e o remetente aprovado correspondente exatamente a `MAIL_FROM_ADDRESS`. Remetentes aprovados são regionais: o endpoint usado deve corresponder à região onde o remetente foi cadastrado. Consulte a [visão geral do serviço](https://docs.oracle.com/en-us/iaas/Content/Email/Concepts/overview.htm).
+4. Publique e valide SPF e DKIM indicados para esse domínio/região. Integre a autorização ao SPF existente, preservando os demais serviços; não crie dois registros SPF para o mesmo domínio nem altere MX para ativar envio. Revise o alinhamento e a política DMARC com o administrador de DNS. Use os valores do Console, conforme [SPF](https://docs.oracle.com/en-us/iaas/Content/Email/Tasks/configurespf.htm) e [boas práticas de entrega](https://docs.oracle.com/en-us/iaas/Content/Email/Reference/deliverabilitybestpractices_topic-bestpractices.htm).
+5. Confira cotas, volume permitido e custos na tenancy antes de habilitar tráfego. A franquia de computação Always Free não define a franquia ou os limites do serviço de e-mail. Configure logs/métricas do Email Delivery e acompanhe rejeições e supressões; aceitação SMTP não garante chegada à caixa de entrada.
+
+### Configurar e liberar o envio
+
+Preencha `.env.app` com as configurações abaixo, substituindo domínio, endpoint e usuário pelos valores reais:
+
+```dotenv
+MAIL_MAILER=smtp
+MAIL_SCHEME=smtps
+MAIL_HOST=ENDPOINT_EXIBIDO_NO_CONSOLE
+MAIL_PORT=465
+MAIL_REQUIRE_TLS=true
+MAIL_TIMEOUT=15
+MAIL_USERNAME=USUARIO_SMTP_EMITIDO_PELA_OCI
+MAIL_PASSWORD_FILE=/run/secrets/mail_password
+MAIL_FROM_ADDRESS=nao-responda@SEU_DOMINIO
+MAIL_FROM_NAME="VERIGRID"
+MAIL_QUEUE=mail
+```
+
+Use `sudoedit secrets/mail_password.txt` para guardar somente a senha emitida, depois `sudo chmod 444 secrets/mail_password.txt`. Não adicione a senha a `MAIL_URL`, ao repositório ou às variáveis `VITE_*`. Não use `log`, `array` ou failover para logs como substituto de envio em produção. O entrypoint exporta o segredo antes de `config:cache` e recusa iniciar API/worker/scheduler com senha ausente, SMTP incompleto, TLS desativado ou timeout acima de 20 segundos.
+
+Se a saída da VM estiver restrita, libere DNS e saída TCP para o endpoint/porta do provedor escolhido no NSG/firewall. Nenhuma porta SMTP de entrada precisa ser publicada. Preserve a validação do certificado TLS. Ao alterar credenciais ou configuração, recrie os processos para recarregar o segredo e o cache:
+
+```sh
+sudo docker compose --env-file .env.production -f compose.production.yaml up -d --no-deps --force-recreate app worker scheduler
+```
+
+O primeiro comando abaixo valida a configuração sem enviar uma mensagem. O segundo faz um envio real e deve ser executado pelo operador apenas para uma caixa sob seu controle, depois de validar remetente, DNS e credenciais:
+
+```sh
+sudo docker compose --env-file .env.production -f compose.production.yaml exec app php artisan mail:test operador@SEU_DOMINIO
+sudo docker compose --env-file .env.production -f compose.production.yaml exec app php artisan mail:test operador@SEU_DOMINIO --send
+```
+
+Depois, teste o fluxo completo pela tela “Esqueci minha senha”: confirme a resposta genérica, acompanhe a fila e a chegada do e-mail, abra o link no domínio final da SPA, redefina a senha, entre com a nova senha e confira que o link usado não funciona novamente. Repita com e-mail inexistente e conta inativa para conferir que a resposta não revela cadastro. Não copie links/tokens para logs ou chamados de suporte.
+
+### Operação e falhas
+
+O worker consome `mail,default`, dando preferência aos e-mails. Mantenha `MAIL_QUEUE=mail` ou altere o comando do worker na mesma release. SMTP tem timeout de 15 segundos, abaixo dos 60 segundos do worker e dos 90 segundos de `retry_after`. Após esgotar as tentativas, consulte as falhas sem despejar payloads ou credenciais em logs públicos:
+
+```sh
+sudo docker compose --env-file .env.production -f compose.production.yaml logs --tail=80 worker
+sudo docker compose --env-file .env.production -f compose.production.yaml exec app php artisan queue:failed
+sudo docker compose --env-file .env.production -f compose.production.yaml exec app php artisan queue:retry UUID_DO_JOB
+```
+
+Antes de reprocessar, corrija a causa: autenticação/credencial, remetente não aprovado, DNS, rede, limite ou destinatário suprimido. Não reenvie todos os jobs indiscriminadamente: tokens expirados exigem nova solicitação e reexecuções podem duplicar mensagens quando o provedor aceitou um envio antes da falha. A fila e o serviço externo não oferecem entrega exatamente uma vez. Rotacione a senha gerando outra credencial no provedor, substituindo o arquivo, recriando os processos e validando o envio antes de revogar a anterior.
+
+No desenvolvimento, o Compose usa `MAIL_HOST=mailpit`, porta `1025`, `MAIL_SCHEME=smtp` e `MAIL_REQUIRE_TLS=false`; a interface do Mailpit fica em `http://localhost:8025`. Inicie também o serviço `queue` para consumir `mail,default`. O envio termina no Mailpit. Não copie credenciais SMTP reais para testes automatizados ou restaurações de homologação.
 
 ## Filas e agendamento
 
