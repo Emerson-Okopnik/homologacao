@@ -7,7 +7,8 @@ Recebemos uma solicitação para redefinir a senha da conta {{ $userEmail }}.
 Acesse o endereço abaixo para criar uma nova senha:
 {{ $resetUrl }}
 
-Este link expira em {{ $expiresInMinutes }} minutos e só pode ser usado para esta solicitação.
+Este link expira em {{ $expiresInMinutes }} minutos a partir da geração do link e pode ser usado uma única vez.
+Se você pediu mais de um link, use o mais recente.
 
 Se você não solicitou esta alteração, ignore este e-mail. Sua senha atual continuará válida.
 

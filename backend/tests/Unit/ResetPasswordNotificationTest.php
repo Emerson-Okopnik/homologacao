@@ -1,7 +1,7 @@
 <?php
 
 use App\Domain\Users\Models\User;
-use App\Notifications\Auth\ResetPasswordNotification;
+use App\Notifications\ResetPasswordNotification;
 use Illuminate\Support\Facades\Notification;
 
 it('usa o modelo personalizado no e-mail de recuperação de senha', function (): void {

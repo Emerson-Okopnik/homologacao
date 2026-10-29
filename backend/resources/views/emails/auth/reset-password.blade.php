@@ -71,8 +71,8 @@
                                             <tr>
                                                 <td style="padding: 16px 18px; border: 1px solid #bfdbfe; border-radius: 10px; background-color: #eff6ff;">
                                                     <p style="margin: 0; color: #1e3a8a; font-size: 14px; line-height: 22px;">
-                                                        <strong>Este link expira em {{ $expiresInMinutes }} minutos.</strong><br>
-                                                        Por segurança, ele só pode ser usado para esta solicitação.
+                                                        <strong>Este link expira em {{ $expiresInMinutes }} minutos a partir da geração do link.</strong><br>
+                                                        Ele pode ser usado uma única vez. Se você pediu mais de um link, use o mais recente.
                                                     </p>
                                                 </td>
                                             </tr>

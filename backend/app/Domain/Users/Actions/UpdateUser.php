@@ -32,7 +32,7 @@ final class UpdateUser
             $willBeActive = $data['active'] ?? $user->active;
 
             if ($this->isActiveAdmin($user) && (! $willBeAdmin || ! $willBeActive) && $this->activeAdminCount() <= 1) {
-                throw new DomainException('O tenant precisa manter ao menos um administrador ativo.', 'last_admin');
+            throw new DomainException('A empresa precisa manter ao menos um administrador ativo.', 'last_admin');
             }
 
             $attributes = app(UserClientLink::class)->normalize($data, $roleSlugs ?? $user->roles->pluck('slug')->all(), $user);

@@ -34,7 +34,7 @@ async function submit() {
 </script>
 
 <template>
-  <AuthShell :title="portalAccess ? 'Acesse seu portal' : 'Bem-vindo de volta'" :subtitle="portalAccess ? 'Entre para acompanhar sua solicitação e seus documentos.' : 'Acesse seu workspace para continuar.'">
+  <AuthShell :title="portalAccess ? 'Acesse seu portal' : 'Bem-vindo de volta'" :subtitle="portalAccess ? 'Entre para acompanhar sua solicitação e seus documentos.' : 'Acesse seu ambiente de trabalho para continuar.'">
     <form class="flex flex-col gap-5" novalidate @submit.prevent="submit">
       <InlineAlert v-if="error && error.status !== 422" :correlation-id="error.correlationId">
         {{ error.message }}

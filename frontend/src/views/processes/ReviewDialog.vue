@@ -50,10 +50,10 @@ async function loadPreview() {
       headers: { Accept: declaredMime! },
       signal: controller.signal,
     })
-    if (!response.ok) throw new Error('Preview unavailable')
+    if (!response.ok) throw new Error('Prévia indisponível')
     const blob = await response.blob()
     const mime = blob.type.split(';')[0]?.toLowerCase()
-    if (!blob.size || (mime && mime !== 'application/octet-stream' && mime !== declaredMime)) throw new Error('Unsupported preview response')
+    if (!blob.size || (mime && mime !== 'application/octet-stream' && mime !== declaredMime)) throw new Error('Formato de prévia não suportado')
     if (disposed || version !== requestVersion) return
     previewUrl.value = URL.createObjectURL(blob.type === declaredMime ? blob : new Blob([blob], { type: declaredMime }))
   } catch {

@@ -74,10 +74,6 @@
   --color-backdrop: #000712;
 }
 
-[data-theme='dark'] .vg-logo {
-  filter: brightness(0) invert(1);
-}
-
 @layer base {
   :root { color-scheme: light; }
   html {

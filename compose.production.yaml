@@ -22,6 +22,7 @@ x-app: &app
     REDIS_HOST: redis
     REDIS_PORT: "6379"
     REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    MAIL_PASSWORD_FILE: /run/secrets/mail_password
     SESSION_DRIVER: redis
     SESSION_SECURE_COOKIE: "true"
     CACHE_STORE: redis
@@ -33,7 +34,7 @@ x-app: &app
   security_opt: [no-new-privileges:true]
   volumes:
     - ./data/storage:/var/www/html/storage
-  secrets: [db_password, redis_password]
+  secrets: [db_password, redis_password, mail_password]
   networks: [edge, data]
   logging: *logging
   depends_on:
@@ -130,7 +131,7 @@ services:
     <<: *app
     mem_limit: 1g
     stop_grace_period: 100s
-    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--backoff=10,60,300", "--timeout=60", "--max-time=3600"]
+    command: ["php", "artisan", "queue:work", "--queue=mail,default", "--sleep=3", "--tries=3", "--backoff=10,60,300", "--timeout=60", "--max-time=3600"]
 
   scheduler:
     <<: *app
@@ -158,3 +159,5 @@ secrets:
     file: ./secrets/db_password.txt
   redis_password:
     file: ./secrets/redis_password.txt
+  mail_password:
+    file: ./secrets/mail_password.txt

@@ -37,7 +37,7 @@ async function submit() {
   saveError.value = null
   try {
     await api(`/clients/${props.clientId}/portal-users`, { method: 'POST', body: { ...form } })
-    created.value = `Acesso criado. Envie ao cliente o e-mail ${form.email} e a senha definida; ele entra pela mesma tela de login.`
+    created.value = `Acesso criado. Envie ao cliente o e-mail ${form.email} e a senha definida; ele entra pela mesma tela de acesso.`
     open.value = false
     form.password = ''
     version.value++
@@ -88,7 +88,7 @@ async function submit() {
     <form v-if="open" class="space-y-4 border-t border-line pt-5" novalidate @submit.prevent="submit">
       <h3 class="text-xs font-semibold">Novo acesso ao portal</h3>
       <FormField v-model="form.name" label="Nome" :error="saveError?.firstError('name')" required />
-      <FormField v-model="form.email" label="E-mail de login" type="email" :error="saveError?.firstError('email')" required />
+      <FormField v-model="form.email" label="E-mail de acesso" type="email" :error="saveError?.firstError('email')" required />
       <FormField v-model="form.password" label="Senha inicial" type="password" hint="Mín. 8, letras e números" :error="saveError?.firstError('password')" required />
       <InlineAlert v-if="saveError && Object.keys(saveError.errors).length === 0">{{ saveError.message }}</InlineAlert>
       <div class="flex flex-wrap gap-2">

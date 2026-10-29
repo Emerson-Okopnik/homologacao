@@ -6,7 +6,7 @@ use App\Domain\Audit\Concerns\Auditable;
 use App\Domain\Clients\Models\Client;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\Users\Enums\PermissionKey;
-use App\Notifications\Auth\ResetPasswordNotification;
+use App\Notifications\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -40,6 +40,11 @@ class User extends Authenticatable
 
     use HasUuids;
     use Notifiable;
+
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
+    }
 
     protected $fillable = ['name', 'email', 'password', 'active', 'client_id'];
 
@@ -137,8 +142,4 @@ class User extends Authenticatable
         $this->permissionCache = null;
     }
 
-    public function sendPasswordResetNotification(#[\SensitiveParameter] $token)
-    {
-        $this->notify(new ResetPasswordNotification($token));
-    }
 }

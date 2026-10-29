@@ -40,7 +40,7 @@ const sections = computed(() =>
     aria-label="Menu principal"
   >
     <div class="relative px-3 pt-5 pb-7">
-      <RouterLink to="/" class="block w-[210px] rounded-md" aria-label="VERIGRID — Dashboard" @click="$emit('close')">
+      <RouterLink to="/" class="block w-[210px] rounded-md" aria-label="VERIGRID — Visão geral" @click="$emit('close')">
         <BrandLogo />
       </RouterLink>
       <p class="mt-2 px-3 text-[8px] font-medium tracking-[.13em] text-muted">HOMOLOGAÇÃO FOTOVOLTAICA</p>

@@ -55,9 +55,9 @@ export function auditTone(event: string) {
 
 export const auditEventOptions = [
   { value: 'auth.', label: 'Autenticação · todos' },
-  { value: 'auth.login', label: 'Login' },
-  { value: 'auth.login_failed', label: 'Falha de login' },
-  { value: 'auth.logout', label: 'Logout' },
+  { value: 'auth.login', label: 'Acesso ao sistema' },
+  { value: 'auth.login_failed', label: 'Falha de acesso' },
+  { value: 'auth.logout', label: 'Saída do sistema' },
   { value: 'auth.password_reset', label: 'Senha redefinida' },
   { value: 'user.', label: 'Usuários · todos' },
   { value: 'user.created', label: 'Usuário criado' },
