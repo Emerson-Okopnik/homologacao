@@ -6,6 +6,7 @@ use App\Domain\Audit\Concerns\Auditable;
 use App\Domain\Clients\Models\Client;
 use App\Domain\Tenancy\Concerns\BelongsToTenant;
 use App\Domain\Users\Enums\PermissionKey;
+use App\Notifications\Auth\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -134,5 +135,10 @@ class User extends Authenticatable
     public function flushPermissionCache(): void
     {
         $this->permissionCache = null;
+    }
+
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token)
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 }

@@ -171,13 +171,6 @@ services:
       "
     networks: [homologa]
 
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: homologa-mailpit
-    ports:
-      - "${MAILPIT_UI_PORT:-8025}:8025"
-    networks: [homologa]
-
 volumes:
   postgres_data:
   redis_data:
