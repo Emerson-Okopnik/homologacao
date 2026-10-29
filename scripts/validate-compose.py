@@ -36,7 +36,7 @@ def main():
         for name in (".env.production", ".env.app", ".env.db", ".env.web"):
             shutil.copyfile(root / f"{name}.example", fixture / name)
         (fixture / "secrets").mkdir()
-        for name in ("db_password", "redis_password", "mail_password"):
+        for name in ("db_password", "redis_password", "resend_api_key"):
             (fixture / "secrets" / f"{name}.txt").write_text(
                 "compose-validation-fixture", encoding="utf-8"
             )
@@ -86,21 +86,18 @@ def main():
         assert "POSTGRES_PASSWORD" not in environment, name
         assert environment["DB_PASSWORD_FILE"] == "/run/secrets/db_password", name
         assert environment["REDIS_PASSWORD_FILE"] == "/run/secrets/redis_password", name
-        assert environment["MAIL_PASSWORD_FILE"] == "/run/secrets/mail_password", name
-        assert environment["MAIL_REQUIRE_TLS"] == "true", name
-        assert environment["MAIL_SCHEME"] == "smtps", name
-        assert str(environment["MAIL_PORT"]) == "465", name
-        assert environment["MAIL_TIMEOUT"] == "15", name
-        assert "MAIL_PASSWORD" not in environment, name
+        assert environment["MAIL_MAILER"] == "resend", name
+        assert environment["RESEND_API_KEY_FILE"] == "/run/secrets/resend_api_key", name
+        assert "RESEND_API_KEY" not in environment, name
         assert {secret["source"] for secret in service["secrets"]} == {
-            "db_password", "redis_password", "mail_password"
+            "db_password", "redis_password", "resend_api_key"
         }, name
         assert all(
             mount["type"] != "bind" or mount["target"] == "/var/www/html/storage"
             for mount in service["volumes"]
         ), f"Source-code bind mount in production: {name}"
     assert "--queue=mail,default" in services["worker"]["command"]
-    assert "mail_password" not in {secret["source"] for secret in services["db"]["secrets"]}
+    assert "resend_api_key" not in {secret["source"] for secret in services["db"]["secrets"]}
     assert not services["caddy"].get("secrets")
     print("Production Compose passed: ports, networks, secrets, persistence and resource controls.")
 

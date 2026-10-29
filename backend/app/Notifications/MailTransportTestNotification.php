@@ -42,7 +42,7 @@ final class MailTransportTestNotification extends Notification implements Should
             ->subject('Teste de e-mail · '.config('app.name'))
             ->greeting('Olá!')
             ->line('Este é um teste do envio de e-mails de '.config('app.name').'.')
-            ->line('Se você recebeu esta mensagem, a fila e o servidor SMTP processaram o teste.')
+            ->line('Se você recebeu esta mensagem, a fila e o Resend processaram o teste.')
             ->line('Nenhuma senha foi alterada.');
     }
 

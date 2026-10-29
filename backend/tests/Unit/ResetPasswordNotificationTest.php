@@ -2,7 +2,6 @@
 
 use App\Domain\Users\Models\User;
 use App\Notifications\ResetPasswordNotification;
-use Illuminate\Support\Facades\Notification;
 
 it('usa o modelo personalizado no e-mail de recuperação de senha', function (): void {
     $user = new User([
@@ -20,21 +19,24 @@ it('usa o modelo personalizado no e-mail de recuperação de senha', function ()
             'text' => 'emails.auth.reset-password-text',
         ])
         ->and($html)->toContain('Criar nova senha')
-        ->and($html)->toContain('token=token-seguro')
+        ->and($html)->toContain('/redefinir-senha/token-seguro?email=maria%40example.com')
         ->and($html)->toContain('maria%40example.com')
         ->and($html)->toContain('60 minutos')
         ->and($html)->not->toContain('<script>alert(1)</script>');
 });
 
 it('envia a notificação personalizada pelo modelo de usuário', function (): void {
-    Notification::fake();
+    $user = new class(['name' => 'Maria', 'email' => 'maria@example.com']) extends User
+    {
+        public ?ResetPasswordNotification $sentNotification = null;
 
-    $user = new User(['name' => 'Maria', 'email' => 'maria@example.com']);
+        public function notify($instance): void
+        {
+            $this->sentNotification = $instance;
+        }
+    };
     $user->sendPasswordResetNotification('token-seguro');
 
-    Notification::assertSentTo(
-        $user,
-        ResetPasswordNotification::class,
-        fn (ResetPasswordNotification $notification): bool => $notification->token === 'token-seguro',
-    );
+    expect($user->sentNotification)->toBeInstanceOf(ResetPasswordNotification::class)
+        ->and($user->sentNotification?->token)->toBe('token-seguro');
 });
