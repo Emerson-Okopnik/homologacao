@@ -28,23 +28,20 @@ final class TestMail extends Command
             // Construir o transporte não conecta nem envia mensagens.
             Mail::mailer($mailer)->getSymfonyTransport();
         } catch (Throwable) {
-            $this->error('Configuração de e-mail inválida. Revise MAIL_* sem expor as credenciais.');
+            $this->error('Configuração de e-mail inválida. Revise MAIL_* e a chave do provedor sem expor credenciais.');
 
             return self::FAILURE;
         }
 
         $this->table(['Configuração', 'Valor'], [
             ['Transporte', $mailer],
-            ['Servidor', config("mail.mailers.{$mailer}.host", 'não se aplica')],
-            ['Porta', config("mail.mailers.{$mailer}.port", 'não se aplica')],
-            ['TLS obrigatório', config("mail.mailers.{$mailer}.require_tls") ? 'sim' : 'não'],
             ['Remetente', config('mail.from.address')],
             ['Conexão de fila', config('queue.default')],
             ['Fila de e-mails', config('mail.queue')],
         ]);
 
         if (! $this->option('send')) {
-            $this->info('Configuração carregada. Nenhuma conexão SMTP ou envio foi realizado. Use --send para testar a entrega.');
+            $this->info('Configuração carregada. Nenhuma conexão externa ou envio foi realizado. Use --send para testar a entrega.');
 
             return self::SUCCESS;
         }

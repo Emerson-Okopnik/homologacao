@@ -141,4 +141,5 @@ class User extends Authenticatable
     {
         $this->permissionCache = null;
     }
+
 }

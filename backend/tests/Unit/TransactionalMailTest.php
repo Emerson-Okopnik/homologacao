@@ -44,7 +44,7 @@ it('renderiza o e-mail de recuperação com o link do frontend e orientações e
 
     expect($html)->toContain(
         'https://app.empresa.com.br/redefinir-senha/token-teste?email=ana%2Bsolar%40example.com',
-        'Redefinir minha senha',
+        'Criar nova senha',
         'uma única vez',
         '60 minutos',
         'a partir da geração do link',
@@ -53,12 +53,12 @@ it('renderiza o e-mail de recuperação com o link do frontend e orientações e
     )->not->toContain('<script>', 'localhost', 'Hello!', 'Laravel');
 });
 
-it('inspeciona configuração sem conectar ao SMTP nem enfileirar e-mails', function (): void {
+it('inspeciona configuração sem conectar ao provedor nem enfileirar e-mails', function (): void {
     Notification::fake();
-    config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.example.test', 'mail.mailers.smtp.password' => 'segredo-smtp']);
+    config(['mail.default' => 'resend', 'services.resend.key' => 're_test_key']);
 
     $this->artisan('mail:test', ['recipient' => 'destino@example.test'])
-        ->expectsOutput('Configuração carregada. Nenhuma conexão SMTP ou envio foi realizado. Use --send para testar a entrega.')
+        ->expectsOutput('Configuração carregada. Nenhuma conexão externa ou envio foi realizado. Use --send para testar a entrega.')
         ->assertSuccessful();
 
     Notification::assertNothingSent();

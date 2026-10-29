@@ -46,15 +46,23 @@ final class ResetPasswordNotification extends ResetPassword implements ShouldBeE
     public function toMail($notifiable): MailMessage
     {
         $resetUrl = $this->resetUrl($notifiable);
+        $expiresInMinutes = (int) config(
+            'auth.passwords.'.config('auth.defaults.passwords').'.expire',
+            60,
+        );
+        $data = [
+            'userName' => trim((string) $notifiable->name),
+            'userEmail' => (string) $notifiable->getEmailForPasswordReset(),
+            'resetUrl' => $resetUrl,
+            'expiresInMinutes' => $expiresInMinutes,
+            'year' => now()->year,
+        ];
 
         return (new MailMessage)
-            ->subject('Redefina sua senha · '.config('app.name'))
-            ->action('Redefinir minha senha', $resetUrl)
-            ->markdown('mail.auth.reset-password', [
-                'name' => $notifiable->name,
-                'resetUrl' => $resetUrl,
-                'minutes' => config('auth.passwords.'.config('auth.defaults.passwords').'.expire'),
-            ]);
+            ->subject('Redefina sua senha | '.config('app.name'))
+            ->action('Criar nova senha', $resetUrl)
+            ->view('emails.auth.reset-password', $data)
+            ->text('emails.auth.reset-password-text', $data);
     }
 
     public function failed(?Throwable $exception): void

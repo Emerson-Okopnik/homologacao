@@ -1,10 +1,14 @@
 <?php
 
 return [
-    'default' => env('MAIL_MAILER', 'smtp'),
+    'default' => env('MAIL_MAILER', 'resend'),
     'queue' => env('MAIL_QUEUE', 'mail'),
 
     'mailers' => [
+        'resend' => [
+            'transport' => 'resend',
+        ],
+
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME', 'smtp'),
@@ -16,12 +20,26 @@ return [
             'require_tls' => (bool) env('MAIL_REQUIRE_TLS', env('APP_ENV') === 'production'),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
-        'array' => ['transport' => 'array'],
-        'log' => ['transport' => 'log', 'channel' => env('MAIL_LOG_CHANNEL')],
+
+        'array' => [
+            'transport' => 'array',
+        ],
+
+        'log' => [
+            'transport' => 'log',
+            'channel' => env('MAIL_LOG_CHANNEL'),
+        ],
     ],
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'nao-responda@homologa.local'),
+        'address' => env('MAIL_FROM_ADDRESS', 'nao-responda@verigrid.com.br'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'VERIGRID')),
+    ],
+
+    'markdown' => [
+        'theme' => env('MAIL_MARKDOWN_THEME', 'default'),
+        'paths' => [
+            resource_path('views/vendor/mail'),
+        ],
     ],
 ];

@@ -22,7 +22,7 @@ x-app: &app
     REDIS_HOST: redis
     REDIS_PORT: "6379"
     REDIS_PASSWORD_FILE: /run/secrets/redis_password
-    MAIL_PASSWORD_FILE: /run/secrets/mail_password
+    RESEND_API_KEY_FILE: /run/secrets/resend_api_key
     SESSION_DRIVER: redis
     SESSION_SECURE_COOKIE: "true"
     CACHE_STORE: redis
@@ -34,7 +34,7 @@ x-app: &app
   security_opt: [no-new-privileges:true]
   volumes:
     - ./data/storage:/var/www/html/storage
-  secrets: [db_password, redis_password, mail_password]
+  secrets: [db_password, redis_password, resend_api_key]
   networks: [edge, data]
   logging: *logging
   depends_on:
@@ -159,5 +159,5 @@ secrets:
     file: ./secrets/db_password.txt
   redis_password:
     file: ./secrets/redis_password.txt
-  mail_password:
-    file: ./secrets/mail_password.txt
+  resend_api_key:
+    file: ./secrets/resend_api_key.txt
