@@ -54,12 +54,13 @@ async function submit() {
 
 <template>
   <BaseDialog title="Alterar etapa do processo" submit-label="Confirmar" :submitting="submitting" :submit-disabled="blocked" :error="error" @close="emit('close')" @submit="submit">
-    <p class="text-sm text-muted">
-      Etapa atual: <strong class="text-ink">{{ process.status_label }}</strong>. Cada mudança fica registrada no histórico e na auditoria.
+    <p class="rounded-lg bg-canvas p-4 text-xs leading-6 text-muted">
+      <span v-if="process.stage_label">Fase atual: <strong class="font-medium text-ink">{{ process.stage_label }}</strong><br></span>
+      Situação: <strong class="font-medium text-ink">{{ process.status_label }}</strong>. Cada mudança fica registrada no histórico.
     </p>
     <SelectField
       v-model="status"
-      label="Nova etapa"
+      label="Nova situação"
       :options="options"
       :error="error?.firstError('status')"
     />

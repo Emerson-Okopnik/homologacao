@@ -10,10 +10,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue(), tailwindcss()],
-    // Tailwind usa o plugin Vite; não herdar o PostCSS do Next.js na raiz.
-    css: {
-      postcss: { plugins: [] },
-    },
     optimizeDeps: {
       entries: ['index.html'],
     },

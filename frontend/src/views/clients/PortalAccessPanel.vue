@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { KeyRound } from '@lucide/vue'
+import { Eye, KeyRound, Plus } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import FormField from '@/components/ui/FormField.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
+import StatusBadge from '@/components/ui/StatusBadge.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
 import { api, toApiError, type ApiError } from '@/lib/http'
 import { formatDateTime } from '@/lib/format'
@@ -19,7 +20,7 @@ interface PortalUser {
 }
 
 const version = ref(0)
-const { data, error } = useApiQuery(
+const { data, error, loading } = useApiQuery(
   () => [props.clientId, version.value] as const,
   ([id]) => api<{ data: PortalUser[] }>(`/clients/${id}/portal-users`),
 )
@@ -49,37 +50,51 @@ async function submit() {
 </script>
 
 <template>
-  <section class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6 lg:col-span-3" aria-labelledby="portal-access">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div class="flex flex-col gap-1">
-        <h2 id="portal-access" class="flex items-center gap-2 font-semibold text-ink">
-          <KeyRound class="size-4 text-primary" aria-hidden="true" />Acesso ao portal do cliente
-        </h2>
-        <p class="text-sm text-muted">Com o acesso, o próprio cliente abre solicitações, informa UC e equipamentos e envia os documentos dele.</p>
+  <section class="vg-panel space-y-5 p-6" aria-labelledby="portal-access">
+    <header class="flex items-start justify-between gap-3">
+      <div>
+        <h2 id="portal-access" class="scroll-mt-28 text-sm font-semibold">Acesso ao portal</h2>
+        <p class="mt-2 text-[11px] leading-5 text-muted">Solicitações e documentos do titular em um só lugar.</p>
       </div>
-      <BaseButton v-if="canManage && !open" variant="secondary" @click="open = true">Criar acesso</BaseButton>
+      <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft"><KeyRound class="size-4 text-primary" aria-hidden="true" /></span>
+    </header>
+
+    <InlineAlert v-if="created" tone="success">{{ created }}</InlineAlert>
+    <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
+    <p v-if="loading && !data" class="text-[11px] text-muted" role="status">Carregando acessos…</p>
+
+    <ul v-if="users.length" class="divide-y divide-line">
+      <li v-for="u in users" :key="u.email" class="py-4 first:pt-0 last:pb-0">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="text-xs font-medium">{{ u.name }}</p>
+          <StatusBadge :tone="u.active ? 'success' : 'neutral'">{{ u.active ? 'Ativo' : 'Inativo' }}</StatusBadge>
+        </div>
+        <p class="mt-2 break-all text-[11px] text-ink">{{ u.email }}</p>
+        <p class="mt-2 text-[10px] leading-5 text-muted">{{ u.last_login_at ? `Último acesso: ${formatDateTime(u.last_login_at)}` : 'Ainda não acessou o portal' }}</p>
+      </li>
+    </ul>
+    <p v-else-if="!open && !error && !loading" class="rounded-lg bg-canvas px-4 py-5 text-[11px] leading-6 text-muted">Nenhum acesso criado para este cliente.</p>
+
+    <div class="flex items-start gap-2.5 rounded-lg bg-primary-soft p-3.5">
+      <Eye class="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+      <p class="text-[10px] leading-5 text-success">O cliente pode abrir solicitações, informar UC e equipamentos e enviar os documentos dele.</p>
     </div>
 
-    <p v-if="created" class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-ink" role="status">{{ created }}</p>
-    <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
+    <BaseButton v-if="canManage && !open" variant="secondary" block @click="open = true">
+      <Plus class="size-3.5" aria-hidden="true" />
+      Criar acesso
+    </BaseButton>
 
-    <form v-if="open" class="grid gap-4 md:grid-cols-3" novalidate @submit.prevent="submit">
+    <form v-if="open" class="space-y-4 border-t border-line pt-5" novalidate @submit.prevent="submit">
+      <h3 class="text-xs font-semibold">Novo acesso ao portal</h3>
       <FormField v-model="form.name" label="Nome" :error="saveError?.firstError('name')" required />
       <FormField v-model="form.email" label="E-mail de login" type="email" :error="saveError?.firstError('email')" required />
       <FormField v-model="form.password" label="Senha inicial" type="password" hint="Mín. 8, letras e números" :error="saveError?.firstError('password')" required />
-      <InlineAlert v-if="saveError && Object.keys(saveError.errors).length === 0" class="md:col-span-3">{{ saveError.message }}</InlineAlert>
-      <div class="flex gap-2 md:col-span-3">
+      <InlineAlert v-if="saveError && Object.keys(saveError.errors).length === 0">{{ saveError.message }}</InlineAlert>
+      <div class="flex flex-wrap gap-2">
         <BaseButton type="submit" :loading="saving">Criar acesso</BaseButton>
         <BaseButton variant="ghost" @click="open = false">Cancelar</BaseButton>
       </div>
     </form>
-
-    <ul v-if="users.length" class="divide-y divide-line rounded-xl border border-line">
-      <li v-for="u in users" :key="u.email" class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-        <span class="text-ink">{{ u.name }} · <span class="text-muted">{{ u.email }}</span></span>
-        <span class="text-xs text-muted">{{ u.last_login_at ? `Último acesso ${formatDateTime(u.last_login_at)}` : 'Nunca acessou' }}</span>
-      </li>
-    </ul>
-    <p v-else-if="!open && !error" class="text-sm text-muted">Nenhum acesso criado para este cliente.</p>
   </section>
 </template>

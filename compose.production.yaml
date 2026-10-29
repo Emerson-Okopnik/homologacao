@@ -1,0 +1,160 @@
+name: homologa-solar-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  image: ${APP_IMAGE:?Defina APP_IMAGE em .env.production com a release}
+  env_file: [.env.app]
+  environment:
+    APP_ENV: production
+    APP_DEBUG: "false"
+    DB_CONNECTION: pgsql
+    DB_HOST: db
+    DB_PORT: "5432"
+    DB_DATABASE: ${DB_DATABASE:-homologa}
+    DB_USERNAME: ${DB_USERNAME:-homologa_app}
+    DB_PASSWORD_FILE: /run/secrets/db_password
+    REDIS_CLIENT: predis
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    SESSION_DRIVER: redis
+    SESSION_SECURE_COOKIE: "true"
+    CACHE_STORE: redis
+    QUEUE_CONNECTION: redis
+    FILESYSTEM_DISK: local
+    LOG_CHANNEL: stderr
+  restart: unless-stopped
+  init: true
+  security_opt: [no-new-privileges:true]
+  volumes:
+    - ./data/storage:/var/www/html/storage
+  secrets: [db_password, redis_password]
+  networks: [edge, data]
+  logging: *logging
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-bookworm
+    env_file: [.env.db]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ${DB_DATABASE:-homologa}
+      APP_DB_USERNAME: ${DB_USERNAME:-homologa_app}
+      APP_DB_PASSWORD_FILE: /run/secrets/db_password
+    restart: unless-stopped
+    stop_grace_period: 60s
+    mem_limit: 3g
+    shm_size: 256m
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/production:/docker-entrypoint-initdb.d:ro
+    secrets: [db_password]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - /bin/sh
+      - -ec
+      - password="$$(cat /run/secrets/redis_password)"; test -n "$$password"; exec docker-entrypoint.sh redis-server --appendonly yes --maxmemory 384mb --maxmemory-policy noeviction --requirepass "$$password"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 512m
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - redis_data:/data
+    secrets: [redis_password]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  app:
+    <<: *app
+    build:
+      context: ./backend
+      target: app
+    mem_limit: 2g
+    stop_grace_period: 75s
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  caddy:
+    image: ${WEB_IMAGE:?Defina WEB_IMAGE em .env.production com a mesma release da API}
+    build:
+      context: ./backend
+      target: web
+    env_file: [.env.web]
+    restart: unless-stopped
+    mem_limit: 256m
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/storage/app/public:/srv/uploads:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
+  worker:
+    <<: *app
+    mem_limit: 1g
+    stop_grace_period: 100s
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--backoff=10,60,300", "--timeout=60", "--max-time=3600"]
+
+  scheduler:
+    <<: *app
+    mem_limit: 512m
+    stop_grace_period: 75s
+    command: ["php", "artisan", "schedule:work"]
+
+networks:
+  edge:
+  data:
+    internal: true
+
+volumes:
+  pgdata:
+    name: homologa-solar-prod_pgdata
+  redis_data:
+    name: homologa-solar-prod_redis_data
+  caddy_data:
+    name: homologa-solar-prod_caddy_data
+  caddy_config:
+    name: homologa-solar-prod_caddy_config
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt

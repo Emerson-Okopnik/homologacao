@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { Download, ExternalLink, FileArchive } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
+import StatusBadge from '@/components/ui/StatusBadge.vue'
 import ProjectDocumentsPanel from '@/views/documents/ProjectDocumentsPanel.vue'
 import DocumentUploadDialog from '@/views/documents/DocumentUploadDialog.vue'
 import ReviewDialog from './ReviewDialog.vue'
@@ -19,7 +21,7 @@ const auth = useAuthStore(),
   dialog = ref<{ action: string; submission?: Submission; pendingId?: string; inspectionId?: string } | null>(null),
   downloadError = ref<ApiError | null>(null)
 const source = computed(() => ({ id: props.process.id, revision: props.revision }))
-const { data, error } = useApiQuery(source, async (s) => {
+const { data, error, loading } = useApiQuery(source, async (s) => {
   const [tracking, technical] = await Promise.all([
     api<{ data: Tracking }>(`/processes/${s.id}/tracking`),
     api<{ data: ProjectTechnicalResponse }>(`/projects/${props.process.project!.id}/technical-data`),
@@ -55,7 +57,7 @@ function reportReviewed() {
   emit('saved')
 }
 const portal = computed(() => {
-  const url = data.value?.external?.portal_url ?? props.process.distributor?.portal_url
+  const url = data.value?.external?.portal_url ?? props.process.distributor?.portal_url ?? props.process.project?.consumer_unit?.distributor?.portal_url
   return url && /^https?:\/\//i.test(url) ? url : null
 })
 function saved() {
@@ -81,30 +83,29 @@ async function download(submission: Submission) {
   <div class="space-y-6">
     <InlineAlert v-if="error">{{ error.message }}</InlineAlert
     ><InlineAlert v-if="downloadError">{{ downloadError.message }}</InlineAlert>
+    <p v-if="loading && !data" class="rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-muted" role="status">Carregando acompanhamento da distribuidora…</p>
     <template v-if="data">
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      <section class="rounded-xl border border-line bg-surface p-5">
         <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 class="font-semibold">Envios e acompanhamento da distribuidora</h2>
+          <div><p class="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-primary">Envio assistido</p><h2 class="text-base font-semibold">Envios e acompanhamento da distribuidora</h2></div>
           <BaseButton
             v-if="canManage && ['pronto_para_envio', 'pendencia_distribuidora', 'aprovado'].includes(process.status)"
             @click="dialog = { action: 'prepare' }"
             >Preparar envio</BaseButton
           >
         </header>
-        <p class="mb-4 text-sm text-muted">Canal assistido: envie o dossiê pelo portal e registre os comprovantes aqui.</p>
-        <a v-if="portal" :href="portal" target="_blank" rel="noopener" class="mb-3 inline-block text-sm font-medium text-primary"
-          >Abrir portal da distribuidora</a
-        >
-        <div class="mb-4 flex flex-wrap gap-3 text-sm">
-          <span>Protocolo: {{ data.external?.protocol_number ?? '—' }}</span
-          ><span>Situação externa: {{ data.external?.status ?? 'Ainda não registrada' }}</span
-          ><BaseButton v-if="canManage" variant="ghost" @click="dialog = { action: 'status' }">Atualizar situação externa</BaseButton>
+        <p class="mb-5 max-w-3xl text-xs leading-6 text-muted">Envie o dossiê pelo portal da distribuidora e registre o protocolo e os comprovantes para acompanhar cada retorno.</p>
+        <div class="mb-6 flex flex-wrap items-start gap-x-10 gap-y-5 rounded-lg bg-canvas p-4">
+          <div><p class="text-[10px] font-medium uppercase tracking-wider text-muted">Protocolo</p><p class="mt-2 break-all text-sm font-semibold">{{ data.external?.protocol_number ?? 'Não registrado' }}</p></div>
+          <div class="min-w-0 flex-1"><p class="text-[10px] font-medium uppercase tracking-wider text-muted">Situação externa</p><p class="mt-2 break-words text-xs font-medium">{{ data.external?.status ?? 'Ainda não registrada' }}</p></div>
+          <a v-if="portal" :href="portal" target="_blank" rel="noopener" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:border-primary"><ExternalLink class="size-4" aria-hidden="true" />Abrir portal da distribuidora</a>
+          <BaseButton v-if="canManage" variant="secondary" @click="dialog = { action: 'status' }">Atualizar situação externa</BaseButton>
         </div>
-        <p v-if="!data.submissions.length" class="text-sm text-muted">Nenhum envio preparado.</p>
-        <ul class="divide-y divide-line">
-          <li v-for="s in data.submissions" :key="s.id" class="py-4 text-sm">
-            <p class="font-semibold">{{ labels[s.kind] }} · versão {{ s.version }} · {{ labels[s.status] ?? s.status }}</p>
-            <p class="mt-1 text-muted">
+        <p v-if="!data.submissions.length" class="rounded-lg border border-dashed border-line px-4 py-8 text-center text-xs text-muted">Nenhum envio preparado. Os dossiês e os comprovantes aparecerão aqui.</p>
+        <ul class="grid gap-4 lg:grid-cols-2">
+          <li v-for="s in data.submissions" :key="s.id" class="rounded-lg border border-line p-4 text-xs">
+            <div class="flex flex-wrap items-start justify-between gap-3"><div class="flex items-center gap-3"><span class="inline-flex size-9 items-center justify-center rounded-lg bg-primary-soft text-primary"><FileArchive class="size-5" aria-hidden="true" /></span><div><p class="font-semibold">{{ labels[s.kind] }}</p><p class="mt-1 text-[10px] text-muted">Versão {{ s.version }}</p></div></div><StatusBadge :tone="s.status === 'sent' ? 'success' : s.status === 'failed' ? 'danger' : 'info'">{{ labels[s.status] ?? s.status }}</StatusBadge></div>
+            <p v-if="s.change_reason || s.external_receipt" class="mt-4 break-words text-xs leading-6 text-muted">
               {{ s.change_reason }}<template v-if="s.external_receipt"> · comprovante {{ s.external_receipt }}</template>
             </p>
             <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -112,8 +113,8 @@ async function download(submission: Submission) {
                 :href="buildUrl(`/processes/${process.id}/submissions/${s.id}/dossier`)"
                 target="_blank"
                 rel="noopener"
-                class="text-primary hover:underline"
-                >Baixar dossiê (ZIP)</a
+                class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-canvas"
+                ><Download class="size-4" aria-hidden="true" />Baixar dossiê (ZIP)</a
               ><BaseButton v-if="canManage && s.status !== 'sent'" @click="dialog = { action: 'confirm', submission: s }">{{
                 s.status === 'failed' ? 'Confirmar nova tentativa' : 'Confirmar envio'
               }}</BaseButton
@@ -135,7 +136,7 @@ async function download(submission: Submission) {
           >Dados técnicos e versões do projeto</RouterLink
         >
       </section>
-      <details class="rounded-2xl border border-line bg-surface p-5">
+      <details class="rounded-xl border border-line bg-surface p-5">
         <summary class="cursor-pointer font-semibold">Comprovantes e anexos do acompanhamento</summary>
         <p class="my-3 text-sm text-muted">Envie e revise comprovantes, respostas às exigências e relatórios utilizados no acompanhamento.</p>
         <ProjectDocumentsPanel
@@ -145,7 +146,7 @@ async function download(submission: Submission) {
           @saved="saved"
         />
       </details>
-      <section v-if="data.pending_items.length || ['enviado', 'em_analise', 'pendencia_distribuidora', 'vistoria_solicitada'].includes(process.status)" class="rounded-2xl border border-line bg-surface p-5">
+      <section v-if="data.pending_items.length || ['enviado', 'em_analise', 'pendencia_distribuidora', 'vistoria_solicitada'].includes(process.status)" class="rounded-xl border border-line bg-surface p-5">
         <header class="mb-3 flex justify-between">
           <h2 class="font-semibold">Exigências da distribuidora</h2>
           <BaseButton
@@ -171,7 +172,7 @@ async function download(submission: Submission) {
           </li>
         </ul>
       </section>
-      <details class="rounded-2xl border border-line bg-surface p-5">
+      <details class="rounded-xl border border-line bg-surface p-5">
         <summary class="cursor-pointer font-semibold">Orçamento de conexão<span v-if="data.budgets.length"> · {{ data.budgets.length }} registro(s)</span></summary>
         <header class="mb-3 flex justify-between">
           <BaseButton v-if="canManage" variant="secondary" @click="dialog = { action: 'budget' }">Registrar orçamento</BaseButton>
@@ -184,7 +185,7 @@ async function download(submission: Submission) {
           </li>
         </ul>
       </details>
-      <section v-if="data.inspections.length || ['aprovado', 'vistoria_solicitada', 'conectado'].includes(process.status)" class="rounded-2xl border border-line bg-surface p-5">
+      <section v-if="data.inspections.length || ['aprovado', 'vistoria_solicitada', 'conectado'].includes(process.status)" class="rounded-xl border border-line bg-surface p-5">
         <header class="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 class="font-semibold">Vistorias e conexão</h2>
           <div class="flex flex-wrap gap-2">
@@ -224,7 +225,7 @@ async function download(submission: Submission) {
           </li>
         </ul>
       </section>
-      <details class="rounded-2xl border border-line bg-surface p-5">
+      <details class="rounded-xl border border-line bg-surface p-5">
         <summary class="cursor-pointer font-semibold">Gestão do processo e atribuições</summary>
         <header class="mb-3 flex justify-between">
           <BaseButton v-if="canManage" variant="ghost" @click="dialog = { action: 'assignment' }">Responsável e prioridade</BaseButton>
@@ -241,7 +242,7 @@ async function download(submission: Submission) {
           </ol>
         </details>
       </details>
-      <details class="rounded-2xl border border-line bg-surface p-5">
+      <details class="rounded-xl border border-line bg-surface p-5">
         <summary class="cursor-pointer font-semibold">Histórico dos envios e retornos</summary>
         <ul class="mt-4 space-y-3 text-sm">
           <li v-for="e in data.events" :key="e.id">

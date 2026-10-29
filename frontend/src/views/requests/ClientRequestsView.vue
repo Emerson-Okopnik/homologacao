@@ -1,26 +1,32 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ChevronRight, Inbox } from '@lucide/vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import PaginationBar from '@/components/ui/PaginationBar.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import { useApiQuery } from '@/composables/useApiQuery'
+import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { api } from '@/lib/http'
 import { formatDate, formatNumber } from '@/lib/format'
 import { requestStatusTabs, requestTone } from '@/lib/requestOptions'
-import type { ClientRequest, ClientRequestStatus } from '@/types/api'
+import type { ClientRequest, ClientRequestStatus, Paginated } from '@/types/api'
 
 const status = ref<ClientRequestStatus | ''>('SUBMITTED')
 const search = ref('')
 const mine = ref(false)
+const debouncedSearch = useDebouncedRef(search, 300)
+const page = ref(1)
+const perPage = ref(20)
+watch([status, debouncedSearch, mine, perPage], () => (page.value = 1))
 
 const { data, error, loading } = useApiQuery(
-  () => ({ status: status.value, search: search.value, mine: mine.value }),
+  () => ({ status: status.value, search: debouncedSearch.value, mine: mine.value, page: page.value, per_page: perPage.value }),
   (q) =>
-    api<{ data: ClientRequest[] }>('/client-requests', {
-      query: { status: q.status || undefined, search: q.search || undefined, mine: q.mine || undefined },
+    api<Paginated<ClientRequest>>('/client-requests', {
+      query: { status: q.status || undefined, search: q.search || undefined, mine: q.mine || undefined, page: q.page, per_page: q.per_page },
     }),
 )
 const requests = computed(() => data.value?.data ?? [])
@@ -42,7 +48,7 @@ const requests = computed(() => data.value?.data ?? [])
           type="button"
           :aria-selected="status === tab.value"
           class="h-8 rounded-lg px-3 text-sm font-medium transition-colors"
-          :class="status === tab.value ? 'bg-primary text-white' : 'text-muted hover:text-ink'"
+          :class="status === tab.value ? 'bg-primary-soft text-primary' : 'text-muted hover:text-ink'"
           @click="status = tab.value"
         >
           {{ tab.label }}
@@ -60,7 +66,7 @@ const requests = computed(() => data.value?.data ?? [])
     <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
 
     <div
-      v-else-if="!loading && requests.length === 0"
+      v-else-if="!loading && requests.length === 0 && (data?.meta.current_page ?? 1) <= 1"
       class="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-line bg-surface px-6 py-12 text-center"
     >
       <Inbox class="size-8 text-muted" aria-hidden="true" />
@@ -68,8 +74,8 @@ const requests = computed(() => data.value?.data ?? [])
       <p class="text-sm text-muted">Quando um cliente abrir um pedido pelo portal, ele aparece nesta fila.</p>
     </div>
 
-    <div v-else class="overflow-hidden rounded-2xl border border-line bg-surface" :aria-busy="loading">
-      <table class="w-full text-sm">
+    <div v-else class="overflow-hidden vg-panel" :aria-busy="loading">
+      <table class="vg-table w-full text-xs">
         <thead class="border-b border-line bg-canvas text-left text-xs uppercase tracking-wider text-muted">
           <tr>
             <th scope="col" class="px-4 py-3 font-medium">Solicitação</th>
@@ -108,6 +114,7 @@ const requests = computed(() => data.value?.data ?? [])
           </tr>
         </tbody>
       </table>
+      <PaginationBar v-if="data" v-model:per-page="perPage" :meta="data.meta" :disabled="loading || !!error" @change="page = $event" />
     </div>
   </div>
 </template>

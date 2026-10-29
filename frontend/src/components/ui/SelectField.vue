@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useId } from 'vue'
+import BaseSelect from './BaseSelect.vue'
 
 defineProps<{
   label: string
@@ -9,6 +10,8 @@ defineProps<{
   error?: string
   hint?: string
   placeholder?: string
+  name?: string
+  hideLabel?: boolean
 }>()
 
 const model = defineModel<string>({ required: true })
@@ -17,21 +20,20 @@ const id = useId()
 
 <template>
   <div class="flex flex-col gap-1.5">
-    <label :for="id" class="text-sm font-medium text-ink">{{ label }}</label>
-    <select
+    <label :id="`${id}-label`" :for="id" :class="hideLabel ? 'sr-only' : 'text-[11px] font-medium leading-5 text-muted'">{{ label }}<span v-if="required" aria-hidden="true"> *</span></label>
+    <BaseSelect
       :id="id"
       v-model="model"
+      :name="name"
+      :options="options"
+      :placeholder="placeholder"
       :required="required"
       :disabled="disabled"
-      :aria-invalid="error ? true : undefined"
+      :invalid="!!error"
+      :aria-labelledby="`${id}-label`"
       :aria-describedby="error || hint ? `${id}-desc` : undefined"
-      class="h-10 rounded-lg border bg-surface px-3 text-sm text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-      :class="error ? 'border-danger' : 'border-line'"
-    >
-      <option v-if="placeholder !== undefined" value="">{{ placeholder }}</option>
-      <option v-for="option in options" :key="option.value" :value="option.value" :disabled="option.disabled">{{ option.label }}</option>
-    </select>
-    <p v-if="error" :id="`${id}-desc`" class="text-xs text-danger">{{ error }}</p>
-    <p v-else-if="hint" :id="`${id}-desc`" class="text-xs text-muted">{{ hint }}</p>
+    />
+    <p v-if="error" :id="`${id}-desc`" class="text-[10px] leading-5 text-danger">{{ error }}</p>
+    <p v-else-if="hint" :id="`${id}-desc`" class="text-[10px] leading-5 text-muted">{{ hint }}</p>
   </div>
 </template>

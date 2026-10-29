@@ -20,12 +20,19 @@ use App\Domain\Tenancy\TenantContext;
 use App\Domain\Users\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /** Dados fictícios identificados por TST; repetir a carga preserva registros já criados. */
 final class TestDataSeeder extends Seeder
 {
-    public function run(TenantContext $context): void
+    public function run(): void
     {
+        if (app()->isProduction()) {
+            throw new RuntimeException('TestDataSeeder bloqueado em produção: cria dados fictícios de teste. Utilize apenas seeders específicos revisados para produção.');
+        }
+
+        $context = app(TenantContext::class);
+
         $tenant = Tenant::where('slug', config('test-data.tenant', 'demo-solar'))->firstOrFail();
         $this->call(RulesSeeder::class);
         $context->run($tenant, function (): void {

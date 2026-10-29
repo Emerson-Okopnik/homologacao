@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Check, ChevronLeft, ChevronRight, HardHat, Plus, Trash2, UserRound } from '@lucide/vue'
+import { Check, ChevronLeft, ChevronRight, Plus, ShieldCheck, Sun, Trash2, UserRound } from '@lucide/vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import FormField from '@/components/ui/FormField.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
@@ -199,30 +199,36 @@ async function submit() {
 }
 
 const inputClass =
-  'h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20'
+  'h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20'
+
+watch(step, async () => {
+  await nextTick()
+  document.getElementById('request-stepper')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <header class="flex flex-col gap-1">
-      <h1 class="text-2xl font-semibold text-ink">{{ editingId ? 'Editar solicitação' : 'Nova solicitação de homologação' }}</h1>
+  <div class="portal-request-form flex flex-col gap-6">
+    <header class="request-heading">
+      <h1>{{ editingId ? 'Editar solicitação' : 'Nova solicitação' }}</h1>
       <p class="text-sm text-muted">
         Preencha o que você sabe. Se tiver dúvidas sobre algum equipamento, consulte a proposta do seu instalador.
       </p>
     </header>
 
-    <ol class="grid grid-cols-4 gap-2" aria-label="Etapas">
-      <li v-for="(label, i) in steps" :key="label" class="flex flex-col gap-2">
-        <span class="h-1.5 rounded-full" :class="i <= step ? 'bg-primary' : 'bg-line'" aria-hidden="true" />
-        <span class="text-xs" :class="i === step ? 'font-semibold text-ink' : 'text-muted'" :aria-current="i === step ? 'step' : undefined">
-          {{ i + 1 }}. {{ label }}
+    <ol id="request-stepper" class="request-stepper" aria-label="Etapas">
+      <li v-for="(label, i) in steps" :key="label" :class="{ current: i === step, complete: i < step }" :aria-current="i === step ? 'step' : undefined">
+        <span class="request-step-number" aria-hidden="true"><Check v-if="i < step" class="size-3.5" /><template v-else>{{ i + 1 }}</template></span>
+        <span class="request-step-label">
+          {{ label }}
         </span>
       </li>
     </ol>
 
     <InlineAlert v-if="error" :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
 
-    <section class="rounded-2xl border border-line bg-surface p-5 md:p-6">
+    <div class="request-layout">
+    <section class="request-content rounded-xl border border-line bg-surface p-5 md:p-6">
       <!-- Etapa 1: UC -->
       <div v-if="step === 0" class="flex flex-col gap-4">
         <div>
@@ -288,7 +294,7 @@ const inputClass =
 
         <fieldset class="flex flex-col gap-3">
           <legend class="mb-2 text-sm font-semibold text-ink">Módulos (placas solares)</legend>
-          <div v-for="(m, i) in system.modules" :key="`m${i}`" class="grid items-end gap-3 rounded-xl bg-canvas p-3 md:grid-cols-[1fr_1fr_8rem_7rem_auto]">
+          <div v-for="(m, i) in system.modules" :key="`m${i}`" class="request-equipment-row grid items-end gap-3 rounded-xl bg-canvas p-3">
             <label class="flex flex-col gap-1.5 text-sm font-medium text-ink">Marca<input v-model="m.brand" :class="inputClass" placeholder="Ex.: Canadian Solar" /></label>
             <label class="flex flex-col gap-1.5 text-sm font-medium text-ink">Modelo<input v-model="m.model" :class="inputClass" placeholder="Ex.: CS6W-550MS" /></label>
             <label class="flex flex-col gap-1.5 text-sm font-medium text-ink">Potência (W)<input v-model.number="m.power_w" type="number" min="10" :class="inputClass" placeholder="550" /></label>
@@ -304,7 +310,7 @@ const inputClass =
 
         <fieldset class="flex flex-col gap-3">
           <legend class="mb-2 text-sm font-semibold text-ink">Inversor</legend>
-          <div v-for="(inv, i) in system.inverters" :key="`i${i}`" class="grid items-end gap-3 rounded-xl bg-canvas p-3 md:grid-cols-[1fr_1fr_8rem_7rem_auto]">
+          <div v-for="(inv, i) in system.inverters" :key="`i${i}`" class="request-equipment-row grid items-end gap-3 rounded-xl bg-canvas p-3">
             <label class="flex flex-col gap-1.5 text-sm font-medium text-ink">Marca<input v-model="inv.brand" :class="inputClass" placeholder="Ex.: Growatt" /></label>
             <label class="flex flex-col gap-1.5 text-sm font-medium text-ink">Modelo<input v-model="inv.model" :class="inputClass" placeholder="Ex.: MIN 5000TL-X" /></label>
             <label class="flex flex-col gap-1.5 text-sm font-medium text-ink">Potência (kW)<input v-model.number="inv.power_kw" type="number" min="0.1" step="0.1" :class="inputClass" placeholder="5" /></label>
@@ -424,7 +430,7 @@ const inputClass =
           <div><dt class="text-muted">Uso da energia</dt><dd class="text-ink">{{ labelOf(compensationOptions, system.compensation_mode) }}</dd></div>
         </dl>
 
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="flex flex-col gap-4">
           <section class="flex flex-col gap-3 rounded-xl border border-line p-4" aria-labelledby="sua-parte">
             <h3 id="sua-parte" class="flex items-center gap-2 text-sm font-semibold text-ink">
               <UserRound class="size-4 text-primary" aria-hidden="true" />Sua parte (documentos do titular)
@@ -437,27 +443,395 @@ const inputClass =
               <li v-if="!obligations.length" class="text-muted">Calculando...</li>
             </ul>
           </section>
-          <section class="flex flex-col gap-3 rounded-xl border border-line p-4" aria-labelledby="parte-rt">
-            <h3 id="parte-rt" class="flex items-center gap-2 text-sm font-semibold text-ink">
-              <HardHat class="size-4 text-primary" aria-hidden="true" />Fica com o responsável técnico
-            </h3>
-            <ul class="flex flex-col gap-2 text-sm">
-              <li v-for="duty in technicalDuties" :key="duty" class="flex items-start gap-2 text-ink">
-                <Check class="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />{{ duty }}
-              </li>
-            </ul>
-          </section>
         </div>
       </div>
 
       <p v-if="tried && stepProblem" role="alert" class="mt-4 text-sm text-danger">{{ stepProblem }}</p>
 
-      <div class="mt-6 flex items-center justify-between border-t border-line pt-4">
+      <div class="request-actions mt-6 flex items-center justify-between gap-3 border-t border-line pt-5">
         <BaseButton v-if="step > 0" variant="secondary" @click="back"><ChevronLeft class="size-4" aria-hidden="true" />Voltar</BaseButton>
-        <span v-else />
+        <BaseButton v-else variant="secondary" @click="router.push('/portal')">Cancelar</BaseButton>
+        <span class="request-step-count">Etapa {{ step + 1 }} de {{ steps.length }}</span>
         <BaseButton v-if="step < steps.length - 1" @click="next">Continuar<ChevronRight class="size-4" aria-hidden="true" /></BaseButton>
         <BaseButton v-else :loading="submitting" @click="submit">{{ editingId ? 'Salvar alterações' : 'Enviar solicitação' }}</BaseButton>
       </div>
     </section>
+    <aside class="request-guide" aria-label="Orientações para a solicitação">
+      <div class="request-guide-heading"><Sun class="size-6" aria-hidden="true" /><h2>Cada informação ajuda a avançar.</h2></div>
+      <section><h3>Sua parte</h3><ul><li v-for="duty in ['Informar a instalação e os equipamentos', 'Enviar os documentos do titular', 'Complementar dados, se solicitado']" :key="duty"><Check class="size-4 shrink-0" aria-hidden="true" /><span>{{ duty }}</span></li></ul></section>
+      <section><h3>Fica com o responsável técnico</h3><ul><li v-for="duty in technicalDuties" :key="duty"><ShieldCheck class="size-4 shrink-0" aria-hidden="true" /><span>{{ duty }}</span></li></ul></section>
+    </aside>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.request-equipment-row {
+  grid-template-columns: minmax(0,1.3fr) minmax(0,1.5fr) minmax(76px,.7fr) minmax(70px,.6fr) auto;
+}
+
+.request-equipment-row label {
+  min-width: 0;
+}
+
+.request-equipment-row input {
+  min-width: 0;
+}
+
+@media (max-width:1199px) {
+  .request-equipment-row {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width:767px) {
+  .request-equipment-row>label:nth-child(-n+2) {
+    grid-column: 1/-1;
+  }
+}
+
+.request-heading h1 {
+  font-size: 29px;
+  font-weight: 600;
+  letter-spacing: -.035em;
+}
+
+.request-heading p {
+  margin-top: 9px;
+  max-width: 860px;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--color-muted);
+}
+
+.request-stepper {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  padding: 24px 26px;
+  background: var(--color-surface);
+  scroll-margin-top: 20px;
+}
+
+.request-stepper li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+  min-width: 0;
+}
+
+.request-stepper li:not(:last-child):after {
+  position: absolute;
+  top: 13px;
+  left: 30px;
+  right: 0;
+  height: 2px;
+  background: var(--color-line);
+  content: '';
+}
+
+.request-stepper li.complete:after {
+  background: var(--color-primary);
+}
+
+.request-step-number {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-line);
+  border-radius: 50%;
+  background: var(--color-surface);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.request-stepper .current .request-step-number,
+.request-stepper .complete .request-step-number {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.request-step-label {
+  max-width: 95%;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+
+.request-stepper .current .request-step-label {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.request-layout {
+  display: grid;
+  grid-template-columns: minmax(0,1.96fr) minmax(300px,1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.request-content {
+  min-width: 0;
+  padding: 26px;
+}
+
+.request-content h2 {
+  font-size: 20px;
+  line-height: 1.5;
+  letter-spacing: -.025em;
+  font-weight: 600;
+}
+
+.request-content h2+p {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.request-content :deep(input),
+.request-content :deep(select),
+.request-content :deep(textarea) {
+  font-size: 12px;
+}
+
+.request-content :deep(label) {
+  line-height: 1.7;
+}
+
+.request-content>div>fieldset {
+  margin-top: 8px;
+}
+
+.request-actions {
+  flex-wrap: wrap;
+}
+
+.request-step-count {
+  margin-right: auto;
+  font-size: 10px;
+  color: var(--color-muted);
+}
+
+.request-guide {
+  position: sticky;
+  top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  background: var(--color-surface);
+}
+
+.request-guide-heading {
+  padding: 24px;
+  background: var(--color-navy);
+  color: #8de0c4;
+}
+
+.request-guide-heading h2 {
+  margin-top: 20px;
+  font-size: 15px;
+  line-height: 1.7;
+  font-weight: 500;
+  color: white;
+}
+
+.request-guide section {
+  margin: 24px;
+  padding-bottom: 26px;
+}
+
+.request-guide section+section {
+  border-top: 1px solid var(--color-line);
+  padding-top: 25px;
+  padding-bottom: 0;
+}
+
+.request-guide h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.request-guide ul {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 24px;
+}
+
+.request-guide li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--color-muted);
+}
+
+.request-guide li svg {
+  margin-top: 2px;
+  color: var(--color-primary);
+}
+
+@media (max-width:1100px) {
+  .request-layout {
+    grid-template-columns: minmax(0,1fr) 300px;
+  }
+
+  .request-content {
+    padding: 22px;
+  }
+
+  .request-content :deep(.md\:grid-cols-4) {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+
+  .request-content :deep(.md\:grid-cols-3) {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width:900px) {
+  .request-layout {
+    grid-template-columns: minmax(0,1fr);
+  }
+
+  .request-guide {
+    position: static;
+  }
+
+  .request-guide {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .request-guide-heading {
+    grid-column: 1/-1;
+  }
+
+  .request-guide section+section {
+    margin-left: 0;
+    border-top: 0;
+    border-left: 1px solid var(--color-line);
+    padding-top: 0;
+    padding-left: 24px;
+  }
+
+  .request-guide-heading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 24px;
+  }
+
+  .request-guide-heading h2 {
+    margin: 0;
+  }
+}
+
+@media (max-width:767px) {
+  .portal-request-form {
+    gap: 20px;
+  }
+
+  .request-heading h1 {
+    font-size: 25px;
+  }
+
+  .request-heading p {
+    font-size: 11px;
+  }
+
+  .request-stepper {
+    border-radius: 10px;
+    padding: 18px 14px;
+  }
+
+  .request-step-number {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+
+  .request-stepper li {
+    gap: 10px;
+  }
+
+  .request-stepper li:not(:last-child):after {
+    top: 11px;
+    left: 26px;
+  }
+
+  .request-step-label {
+    font-size: 8px;
+    line-height: 1.6;
+  }
+
+  .request-content {
+    padding: 18px;
+  }
+
+  .request-content h2 {
+    font-size: 18px;
+  }
+
+  .request-content h2+p {
+    font-size: 10.5px;
+  }
+
+  .request-content :deep(input),
+  .request-content :deep(select),
+  .request-content :deep(textarea) {
+    font-size: 13px;
+  }
+
+  .request-step-count {
+    display: none;
+  }
+
+  .request-actions {
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .request-actions :deep(button) {
+    min-height: 44px;
+    flex: 1;
+    font-size: 11px;
+  }
+
+  .request-guide {
+    display: block;
+  }
+
+  .request-guide section {
+    margin: 20px;
+  }
+
+  .request-guide section+section {
+    margin: 20px;
+    border-top: 1px solid var(--color-line);
+    border-left: 0;
+    padding-top: 20px;
+    padding-left: 0;
+  }
+
+  .request-guide ul {
+    gap: 15px;
+    margin-top: 18px;
+  }
+
+  .request-guide-heading h2 {
+    font-size: 13px;
+  }
+}
+</style>

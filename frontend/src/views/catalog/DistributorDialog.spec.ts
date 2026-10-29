@@ -48,7 +48,7 @@ describe('distribuidoras', () => {
   it('abre o cadastro pelo catálogo, salva e atualiza a listagem', async () => {
     let created = false
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
-      if (url === '/api/technical-responsibles') return response([])
+      if (String(url).startsWith('/api/technical-responsibles?')) return response([])
       if (url === '/api/distributors' && init?.method === 'POST') {
         created = true
         return response(distributor, 201)

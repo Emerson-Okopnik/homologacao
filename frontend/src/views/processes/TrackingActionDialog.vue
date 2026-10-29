@@ -37,7 +37,7 @@ const form = reactive({
       : props.action === 'checklist'
         ? 'aprovado'
         : (props.tracking.external?.status ?? ''),
-  portal: props.tracking.external?.portal_url ?? props.process.distributor?.portal_url ?? '',
+  portal: props.tracking.external?.portal_url ?? props.process.distributor?.portal_url ?? props.process.project?.consumer_unit?.distributor?.portal_url ?? '',
   pending: props.pendingId ?? '',
   code: '',
   due: '',

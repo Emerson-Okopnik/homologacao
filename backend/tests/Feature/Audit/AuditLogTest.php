@@ -81,3 +81,21 @@ it('a listagem de auditoria só mostra eventos do próprio tenant', function ():
         ->assertOk()
         ->assertJsonMissing(['event' => 'test.other_tenant']);
 });
+
+it('distingue o evento exato do prefixo e permite consultar somente a data final', function (): void {
+    app(TenantContext::class)->run($this->tenant, function (): void {
+        foreach (['auth.login', 'auth.login_failed', 'auth.logout'] as $event) {
+            AuditLog::create(['event' => $event, 'user_id' => $this->admin->id, 'created_at' => '2026-10-13 23:59:59']);
+        }
+        AuditLog::create(['event' => 'auth.login', 'user_id' => $this->admin->id, 'created_at' => '2026-10-14 00:00:00']);
+    });
+    $this->actingAs($this->admin, 'web');
+    $this->getJson('/api/audit-logs?event=auth.login&event_match=exact&from=2026-10-13&to=2026-10-13')
+        ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.event', 'auth.login');
+    $this->getJson('/api/audit-logs?event=auth.&event_match=prefix&to=2026-10-13')
+        ->assertOk()->assertJsonPath('meta.total', 3);
+    $this->getJson('/api/audit-logs?from=2026-10-20&to=2026-10-10')
+        ->assertUnprocessable()->assertJsonValidationErrors('to');
+    $this->getJson('/api/audit-logs?event_match=invalid')
+        ->assertUnprocessable()->assertJsonValidationErrors('event_match');
+});

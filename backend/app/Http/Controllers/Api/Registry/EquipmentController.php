@@ -18,6 +18,7 @@ final class EquipmentController extends Controller
         $this->authorize('projects.view');
 
         $filters = $request->validate([
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:100'],
             'type' => ['sometimes', 'nullable', Rule::in(EquipmentItem::TYPES)],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'active' => ['sometimes', 'nullable', 'boolean'],
@@ -28,8 +29,8 @@ final class EquipmentController extends Controller
             ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where(fn ($w) => $w
                 ->where('manufacturer', 'ilike', "%{$s}%")->orWhere('model', 'ilike', "%{$s}%")))
             ->when(array_key_exists('active', $filters) && $filters['active'] !== null, fn ($q) => $q->where('active', (bool) $filters['active']))
-            ->orderBy('type')->orderBy('manufacturer')->orderBy('model')
-            ->paginate(100);
+            ->orderBy('type')->orderBy('manufacturer')->orderBy('model')->orderBy('id')
+            ->paginate($filters['per_page'] ?? 100);
 
         return EquipmentResource::collection($items);
     }

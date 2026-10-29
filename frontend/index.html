@@ -3,12 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0D1420" />
-    <meta name="description" content="Homologa Solar — gestão de homologação de sistemas fotovoltaicos junto às distribuidoras." />
-    <title>Homologa Solar</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+      (() => {
+        let theme = 'system'
+        try { theme = localStorage.getItem('verigrid.theme') || 'system' } catch {}
+        const dark = theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
+    <meta name="theme-color" content="#0A1F5C" />
+    <meta name="description" content="VERIGRID — projetos, documentos e pessoas conectados em um único fluxo de homologação fotovoltaica." />
+    <title>VERIGRID · Homologação fotovoltaica</title>
   </head>
   <body>
     <div id="app"></div>

@@ -17,20 +17,22 @@ import type { Paginated, Project } from '@/types/api'
 const auth = useAuthStore()
 const search = ref('')
 const debounced = useDebouncedRef(search, 300)
-const filters = reactive({ page: 1 })
+const filters = reactive({ page: 1, per_page: 20 })
 watch(debounced, () => (filters.page = 1))
 
-const source = computed(() => ({ search: debounced.value, page: filters.page }))
+watch(() => filters.per_page, () => (filters.page = 1))
+
+const source = computed(() => ({ search: debounced.value, page: filters.page, per_page: filters.per_page }))
 const { data, error, loading } = useApiQuery(source, (s) => api<Paginated<Project>>('/projects', { query: s }))
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <div class="mx-auto w-full max-w-[1240px]">
     <PageHeader title="Projetos" description="Sistemas fotovoltaicos dimensionados e vinculados a uma unidade consumidora.">
       <template v-if="auth.can('projects.manage')" #actions>
         <RouterLink
           to="/projetos/novo"
-          class="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover"
+          class="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-on-primary hover:bg-primary-hover"
         >
           <Plus class="size-4" aria-hidden="true" />
           Novo projeto
@@ -38,7 +40,7 @@ const { data, error, loading } = useApiQuery(source, (s) => api<Paginated<Projec
       </template>
     </PageHeader>
 
-    <div class="overflow-hidden rounded-2xl border border-line bg-surface">
+    <div class="overflow-hidden vg-panel">
       <div class="border-b border-line p-4">
         <SearchInput v-model="search" label="Buscar projetos" placeholder="Código, cliente ou UC" />
       </div>
@@ -47,7 +49,7 @@ const { data, error, loading } = useApiQuery(source, (s) => api<Paginated<Projec
         <InlineAlert :correlation-id="error.correlationId">{{ error.message }}</InlineAlert>
       </div>
       <div v-else class="overflow-x-auto">
-        <table class="w-full text-left text-sm" :aria-busy="loading">
+        <table class="vg-table w-full text-left text-xs" :aria-busy="loading">
           <thead class="bg-canvas text-xs font-semibold uppercase tracking-wider text-muted">
             <tr>
               <th scope="col" class="px-4 py-3">Projeto</th>
@@ -90,7 +92,7 @@ const { data, error, loading } = useApiQuery(source, (s) => api<Paginated<Projec
           </tbody>
         </table>
       </div>
-      <PaginationBar v-if="data" :meta="data.meta" @change="filters.page = $event" />
+      <PaginationBar v-if="data" v-model:per-page="filters.per_page" :meta="data.meta" :disabled="loading || !!error" @change="filters.page = $event" />
     </div>
   </div>
 </template>

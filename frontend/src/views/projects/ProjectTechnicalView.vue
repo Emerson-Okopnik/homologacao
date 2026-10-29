@@ -280,7 +280,7 @@ async function openProcess() {
       </p>
       <form class="space-y-6" novalidate @submit.prevent="save">
         <fieldset :disabled="!canEdit || saving" class="space-y-6">
-          <section class="rounded-2xl border border-line bg-surface p-5">
+          <section class="vg-panel p-5">
             <h2 class="mb-4 font-semibold">Identificação e conexão</h2>
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <FormField v-model="form.name" label="Nome do projeto" required />
@@ -315,7 +315,7 @@ async function openProcess() {
               ><input v-model="form.emergency_generator" type="checkbox" />Possui gerador de emergência</label
             >
           </section>
-          <section class="rounded-2xl border border-line bg-surface p-5">
+          <section class="vg-panel p-5">
             <header class="mb-4 flex justify-between">
               <h2 class="font-semibold">Arranjos fotovoltaicos</h2>
               <BaseButton variant="secondary" @click="add('array')">Adicionar arranjo</BaseButton>
@@ -335,7 +335,7 @@ async function openProcess() {
               <BaseButton variant="ghost" @click="arrays.splice(index, 1)">Remover arranjo</BaseButton>
             </div>
           </section>
-          <section class="rounded-2xl border border-line bg-surface p-5">
+          <section class="vg-panel p-5">
             <header class="mb-4 flex justify-between">
               <h2 class="font-semibold">Inversores</h2>
               <BaseButton variant="secondary" @click="add('inverter')">Adicionar inversor</BaseButton>
@@ -357,7 +357,7 @@ async function openProcess() {
               <BaseButton variant="ghost" @click="inverters.splice(index, 1)">Remover inversor</BaseButton>
             </div>
           </section>
-          <section class="rounded-2xl border border-line bg-surface p-5">
+          <section class="vg-panel p-5">
             <header class="mb-4 flex justify-between">
               <h2 class="font-semibold">Armazenamento (opcional)</h2>
               <BaseButton variant="secondary" @click="add('storage')">Adicionar bateria</BaseButton>
@@ -372,7 +372,7 @@ async function openProcess() {
               <BaseButton variant="ghost" @click="storage.splice(index, 1)">Remover bateria</BaseButton>
             </div>
           </section>
-          <section class="rounded-2xl border border-line bg-surface p-5">
+          <section class="vg-panel p-5">
             <h2 class="mb-4 font-semibold">Compensação e rateio</h2>
             <div class="mb-4 grid gap-4 sm:grid-cols-2">
               <SelectField v-model="form.mode" label="Modalidade" :options="modalities" /><SelectField
@@ -418,7 +418,7 @@ async function openProcess() {
         :editable="!!canEdit"
         @saved="revision++"
       />
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      <section class="vg-panel p-5">
         <h2 class="mb-3 font-semibold">
           Responsabilidade técnica · {{ data.project.technical_responsible?.name ?? 'Defina o responsável no cadastro do projeto' }}
         </h2>
@@ -451,7 +451,7 @@ async function openProcess() {
           /><BaseButton type="submit" :loading="saving">Vincular termo</BaseButton>
         </form>
       </section>
-      <section class="rounded-2xl border border-line bg-surface p-5">
+      <section class="vg-panel p-5">
         <h2 class="mb-3 font-semibold">Versões congeladas</h2>
         <p v-if="!data.versions.length" class="text-sm text-muted">Uma versão será congelada ao preparar o envio.</p>
         <ul class="divide-y divide-line">

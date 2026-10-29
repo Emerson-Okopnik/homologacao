@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AuthShell from '@/components/layout/AuthShell.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+const portalAccess = computed(() => typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/portal'))
 
 const form = reactive({ email: '', password: '', remember: false })
 const submitting = ref(false)
@@ -33,15 +34,15 @@ async function submit() {
 </script>
 
 <template>
-  <AuthShell title="Entrar" subtitle="Acesse com seu e-mail corporativo.">
-    <form class="flex flex-col gap-4" novalidate @submit.prevent="submit">
+  <AuthShell :title="portalAccess ? 'Acesse seu portal' : 'Bem-vindo de volta'" :subtitle="portalAccess ? 'Entre para acompanhar sua solicitação e seus documentos.' : 'Acesse seu workspace para continuar.'">
+    <form class="flex flex-col gap-5" novalidate @submit.prevent="submit">
       <InlineAlert v-if="error && error.status !== 422" :correlation-id="error.correlationId">
         {{ error.message }}
       </InlineAlert>
 
       <FormField
         v-model="form.email"
-        label="E-mail"
+        label="E-mail profissional"
         type="email"
         autocomplete="username"
         required
@@ -56,17 +57,27 @@ async function submit() {
         :error="error?.firstError('password')"
       />
 
-      <div class="flex items-center justify-between text-sm">
+      <div class="flex flex-wrap items-center justify-between gap-3 text-[11px]">
         <label class="flex items-center gap-2 text-muted">
           <input v-model="form.remember" type="checkbox" class="size-4 rounded border-line accent-primary" />
           Manter conectado
         </label>
-        <RouterLink :to="{ name: 'forgot-password' }" class="font-medium text-primary hover:underline">
-          Esqueci a senha
+        <RouterLink :to="{ name: 'forgot-password' }" class="rounded-md bg-canvas px-3 py-2 font-medium text-ink hover:bg-blue-soft">
+          Esqueci minha senha
         </RouterLink>
       </div>
 
-      <BaseButton type="submit" block :loading="submitting">Entrar</BaseButton>
+      <BaseButton type="submit" block class="mt-2 !h-12" :loading="submitting">{{ portalAccess ? 'Entrar no portal' : 'Entrar na plataforma' }}</BaseButton>
     </form>
+
+    <template #footer>
+      <p class="mb-4 text-[11px] leading-5 text-muted">{{ portalAccess ? 'Faz parte da equipe de homologação?' : 'É cliente e deseja acompanhar sua solicitação?' }}</p>
+      <RouterLink
+        :to="{ name: 'login', query: portalAccess ? {} : { redirect: '/portal' } }"
+        class="flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-4 text-xs font-medium text-ink transition-colors hover:bg-canvas"
+      >
+        {{ portalAccess ? 'Acessar ambiente da equipe' : 'Acessar portal do cliente' }}
+      </RouterLink>
+    </template>
   </AuthShell>
 </template>

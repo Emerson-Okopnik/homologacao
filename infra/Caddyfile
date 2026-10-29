@@ -1,0 +1,37 @@
+{
+    email {$ACME_EMAIL}
+    servers {
+        protocols h1 h2
+    }
+}
+
+{$API_DOMAIN} {
+    encode zstd gzip
+    log {
+        output stdout
+        format json
+    }
+    header {
+        -Server
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+    request_body {
+        max_size 24MB
+    }
+    @blocked path /.env* /.git/* /vendor/* /composer.*
+    respond @blocked 404
+
+    # Somente arquivos explicitamente públicos; documentos privados passam pela API.
+    handle_path /storage/* {
+        root * /srv/uploads
+        @unsafe path *.php *.phtml *.phar *.html *.htm *.svg *.js
+        respond @unsafe 404
+        file_server
+    }
+    handle {
+        root * /var/www/html/public
+        php_fastcgi app:9000
+        file_server
+    }
+}

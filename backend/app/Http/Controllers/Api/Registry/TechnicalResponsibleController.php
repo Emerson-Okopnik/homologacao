@@ -21,6 +21,7 @@ final class TechnicalResponsibleController extends Controller
         $this->authorize('projects.view');
 
         $filters = $request->validate([
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:100'],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'active' => ['sometimes', 'nullable', 'boolean'],
         ]);
@@ -31,8 +32,8 @@ final class TechnicalResponsibleController extends Controller
             ->when($filters['search'] ?? null, fn ($q, string $s) => $q->where(fn ($w) => $w
                 ->where('name', 'ilike', "%{$s}%")->orWhere('registration', 'like', "%{$s}%")))
             ->when(array_key_exists('active', $filters) && $filters['active'] !== null, fn ($q) => $q->where('active', (bool) $filters['active']))
-            ->orderBy('name')
-            ->paginate(50);
+            ->orderBy('name')->orderBy('id')
+            ->paginate($filters['per_page'] ?? 50);
 
         return TechnicalResponsibleResource::collection($items);
     }

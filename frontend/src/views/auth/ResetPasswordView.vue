@@ -41,7 +41,7 @@ async function submit() {
       <InlineAlert tone="success">Senha redefinida. Entre com a nova senha.</InlineAlert>
       <RouterLink
         :to="{ name: 'login' }"
-        class="inline-flex h-10 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-white hover:bg-primary-hover"
+        class="inline-flex h-10 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-on-primary hover:bg-primary-hover"
       >
         Ir para o login
       </RouterLink>
