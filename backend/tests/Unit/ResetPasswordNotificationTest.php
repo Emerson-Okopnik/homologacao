@@ -4,6 +4,8 @@ use App\Domain\Users\Models\User;
 use App\Notifications\ResetPasswordNotification;
 
 it('usa o modelo personalizado no e-mail de recuperação de senha', function (): void {
+    config(['app.name' => 'Homologa Solar']);
+
     $user = new User([
         'name' => 'Maria <script>alert(1)</script>',
         'email' => 'maria@example.com',

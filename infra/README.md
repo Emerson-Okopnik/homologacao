@@ -227,3 +227,42 @@ for file in scripts/*.sh backend/docker/*.sh docker/postgres/production/*.sh; do
 ```
 
 O workflow automático valida o código e usa PostgreSQL 17 descartável no runner para testes funcionais, sem acessar a OCI; o workflow manual de imagens valida as bases/runtime em ambas as arquiteturas. Executá-los não provisiona OCI nem publica imagens. A validação final precisa acontecer na VM e nos domínios reais antes da liberação.
+
+## Deploy automático pelo GitHub Actions
+
+O workflow `.github/workflows/deploy-production.yml` valida pull requests destinadas à `main`. Depois do merge, ele aguarda o workflow `Validate application` terminar com sucesso, compila o frontend com a URL real da API, envia o SHA aprovado ao host por SSH e, depois que a API estiver pronta, publica o mesmo commit no Cloudflare Pages.
+
+O executor do host constrói imagens identificadas pelo SHA, exige backup externo bem-sucedido, entra em manutenção, para os processos que escrevem em segundo plano, executa migrations, recria somente os serviços de aplicação e testa `/ready`. Se o rollout ou o health check falhar, restaura as tags e os contêineres anteriores. As migrations não são revertidas automaticamente; releases devem usar migrations retrocompatíveis no padrão expand/contract.
+
+### Preparação única do host
+
+O checkout em `/opt/homologa` deve pertencer ao usuário `deploy`, possuir acesso de leitura ao repositório e estar sem alterações em arquivos versionados. Instale uma cópia imutável do executor e autorize somente esse comando sem senha:
+
+```sh
+cd /opt/homologa
+sudo install -o root -g root -m 750 scripts/deploy-production.sh /usr/local/sbin/homologa-deploy
+echo 'deploy ALL=(root) NOPASSWD: /usr/local/sbin/homologa-deploy [0-9a-f]*' \
+  | sudo tee /etc/sudoers.d/homologa-deploy >/dev/null
+sudo chmod 440 /etc/sudoers.d/homologa-deploy
+sudo visudo -cf /etc/sudoers.d/homologa-deploy
+```
+
+Se o caminho ou usuário do host forem diferentes, ajuste as constantes no topo do executor antes de instalá-lo. O comando `/usr/local/sbin/homologa-backup` e sua configuração off-site precisam estar instalados, testados e executáveis por root.
+
+Crie um Environment do GitHub chamado `production` e configure:
+
+| Tipo | Nome | Conteúdo |
+| --- | --- | --- |
+| Secret | `PRODUCTION_SSH_HOST` | IP ou hostname da VM |
+| Secret | `PRODUCTION_SSH_KEY` | chave privada exclusiva da automação |
+| Secret | `PRODUCTION_SSH_KNOWN_HOSTS` | linha fixa da chave pública SSH do host; para porta alternativa use `[host]:porta` |
+| Secret | `CLOUDFLARE_API_TOKEN` | token restrito a editar o projeto do Pages |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | identificador da conta Cloudflare |
+| Variable | `PRODUCTION_SSH_USER` | `deploy` |
+| Variable | `PRODUCTION_SSH_PORT` | porta SSH, normalmente `22` |
+| Variable | `PRODUCTION_VITE_API_URL` | URL completa, por exemplo `https://api.SEU_DOMINIO/api` |
+| Variable | `CLOUDFLARE_PAGES_PROJECT` | nome exato do projeto no Pages |
+
+Cadastre a chave pública correspondente em `/home/deploy/.ssh/authorized_keys`. Gere `PRODUCTION_SSH_KNOWN_HOSTS` a partir de uma chave do host conferida por canal administrativo confiável; não aceite automaticamente uma chave descoberta durante o deploy. Proteções e aprovadores opcionais do Environment podem ser habilitados se a política exigir liberação humana.
+
+No projeto do Cloudflare Pages, mantenha `main` como branch de produção, mas desative **Enable automatic production branch deployments** em **Settings > Builds > Branch control**. Assim o push não cria um deploy paralelo antes do CI; o Wrangler publica o artefato somente depois do rollout saudável da API. As previews de pull requests podem continuar habilitadas separadamente.

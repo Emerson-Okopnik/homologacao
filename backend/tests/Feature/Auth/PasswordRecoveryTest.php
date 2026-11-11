@@ -132,7 +132,7 @@ it('restaura a notificação criptografada fora do contexto da empresa e entrega
     expect($message->getTo()[0]->getAddress())->toBe($this->user->email)
         ->and($message->getHtmlBody())->toContain(
             'https://app.empresa.com.br/redefinir-senha/'.$token.'?email=recuperar%40example.com',
-            'Redefinir minha senha',
+            'Criar nova senha',
             '60 minutos',
         );
 });
