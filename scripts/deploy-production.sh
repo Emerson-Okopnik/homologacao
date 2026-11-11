@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 umask 077
 
-readonly PROJECT_DIR=/opt/homologa
+readonly PROJECT_DIR=/opt/verigrid
 readonly DEPLOY_USER=deploy
 readonly BACKUP_COMMAND=/usr/local/sbin/homologa-backup
 readonly LOCK_FILE=/run/lock/homologa-deploy.lock
