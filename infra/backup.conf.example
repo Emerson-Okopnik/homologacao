@@ -1,6 +1,6 @@
 # Trusted Bash file. Install as /etc/homologa-backup.conf, root:root mode 0600.
 # Only the PUBLIC age recipient belongs here; keep the private identity off the VM.
-PROJECT_DIR=/opt/homologa
+PROJECT_DIR=/opt/verigrid
 BACKUP_ROOT=/var/backups/homologa
 AGE_RECIPIENT=age1REPLACE_WITH_PUBLIC_RECIPIENT
 OCI_NAMESPACE=REPLACE_WITH_OBJECT_STORAGE_NAMESPACE
