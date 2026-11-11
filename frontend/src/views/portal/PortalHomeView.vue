@@ -44,7 +44,7 @@ watch(() => [route.hash, loading.value], async () => {
 <template>
   <div class="portal-home">
     <header class="portal-page-heading">
-      <h1>Olá, TESTE {{ firstName }}.</h1>
+      <h1>Olá, TESTE 3 {{ firstName }}.</h1>
       <p>Acompanhe sua energia e encontre tudo o que precisa em um só lugar.</p>
     </header>
 
